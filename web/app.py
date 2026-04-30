@@ -382,6 +382,91 @@ def checkout():
     return jsonify({"ok": True, "branch": new_branch, "head": from_commit_id})
 
 
+@app.route("/api/commit/<commit_id>", methods=["DELETE"])
+def delete_commit(commit_id):
+    """Delete a commit. Re-link children to the deleted commit's parent.
+    If it is the branch head, update head to its parent."""
+    conn = get_db()
+    row = conn.execute("SELECT * FROM commits WHERE id = ?", (commit_id,)).fetchone()
+    if not row:
+        conn.close()
+        return jsonify({"error": "Commit not found"}), 404
+
+    parent_id = row["parent_id"]
+    branch = row["branch"]
+
+    # Re-link any child commits that point to this commit
+    conn.execute("UPDATE commits SET parent_id = ? WHERE parent_id = ?", (parent_id, commit_id))
+
+    # If this commit is the head of its branch, move head back to parent
+    head_row = conn.execute("SELECT head_commit_id FROM branches WHERE name = ?", (branch,)).fetchone()
+    if head_row and head_row["head_commit_id"] == commit_id:
+        conn.execute("UPDATE branches SET head_commit_id = ? WHERE name = ?", (parent_id, branch))
+
+    # Also check other branches that may have been checked out from this commit
+    # (their head_commit_id == commit_id). Re-point them to parent.
+    conn.execute("UPDATE branches SET head_commit_id = ? WHERE head_commit_id = ? AND name != ?",
+                 (parent_id, commit_id, branch))
+
+    # Delete the commit
+    conn.execute("DELETE FROM commits WHERE id = ?", (commit_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "deleted": commit_id})
+
+
+@app.route("/api/branch/<branch_name>", methods=["DELETE"])
+def delete_branch(branch_name):
+    """Delete a branch and all its commits. Cannot delete 'main'."""
+    if branch_name == "main":
+        return jsonify({"error": "Cannot delete the 'main' branch"}), 400
+    if not db_branch_exists(branch_name):
+        return jsonify({"error": "Branch not found"}), 404
+
+    conn = get_db()
+
+    # Before deleting commits, re-link any commits on OTHER branches
+    # whose parent_id points to a commit on this branch.
+    # Find all commit ids on this branch
+    branch_commit_ids = [r["id"] for r in conn.execute(
+        "SELECT id FROM commits WHERE branch = ?", (branch_name,)
+    ).fetchall()]
+
+    if branch_commit_ids:
+        # For each commit on this branch, find its parent (which may be on another branch)
+        # Walk back to find the fork point (the parent_id of the first commit on this branch)
+        first_commit = None
+        head_row = conn.execute("SELECT head_commit_id FROM branches WHERE name = ?", (branch_name,)).fetchone()
+        current_id = head_row["head_commit_id"] if head_row else None
+        while current_id:
+            c = conn.execute("SELECT * FROM commits WHERE id = ?", (current_id,)).fetchone()
+            if not c or c["branch"] != branch_name:
+                break
+            first_commit = c
+            current_id = c["parent_id"]
+        fork_parent = first_commit["parent_id"] if first_commit else None
+
+        # Re-link other branches' commits that point to any commit on this branch
+        placeholders = ",".join("?" for _ in branch_commit_ids)
+        conn.execute(
+            f"UPDATE commits SET parent_id = ? WHERE parent_id IN ({placeholders}) AND branch != ?",
+            [fork_parent] + branch_commit_ids + [branch_name]
+        )
+        # Re-link other branches whose head points to a commit on this branch
+        conn.execute(
+            f"UPDATE branches SET head_commit_id = ? WHERE head_commit_id IN ({placeholders}) AND name != ?",
+            [fork_parent] + branch_commit_ids + [branch_name]
+        )
+
+    # Delete all commits on this branch
+    conn.execute("DELETE FROM commits WHERE branch = ?", (branch_name,))
+    # Delete the branch
+    conn.execute("DELETE FROM branches WHERE name = ?", (branch_name,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "deleted": branch_name})
+
+
 @app.route("/api/infer_stream", methods=["POST"])
 def infer_stream():
     """Run inference with streaming SSE output."""

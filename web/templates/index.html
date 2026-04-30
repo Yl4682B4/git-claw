@@ -319,6 +319,23 @@
             border-color: #58a6ff;
             color: #58a6ff;
         }
+        .delete-commit-btn:hover {
+            border-color: #f85149 !important;
+            color: #f85149 !important;
+        }
+        .branch-delete-btn {
+            font-size: 12px;
+            color: #484f58;
+            cursor: pointer;
+            padding: 2px 4px;
+            border-radius: 3px;
+            transition: all 0.15s;
+            flex-shrink: 0;
+        }
+        .branch-delete-btn:hover {
+            color: #f85149;
+            background: #f8514922;
+        }
 
         /* Expanded detail */
         .commit-detail {
@@ -568,8 +585,9 @@
                 <div class="branch-item ${b.name === activeBranch ? 'active' : ''}"
                      onclick="switchBranch('${b.name}')">
                     <span class="icon">⎇</span>
-                    <span>${b.name}</span>
+                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(b.name)}</span>
                     <span class="count">${b.commit_count}</span>
+                    ${b.name !== 'main' ? `<span class="branch-delete-btn" title="Delete branch" onclick="event.stopPropagation();deleteBranch('${escapeHtml(b.name)}')">✕</span>` : ''}
                 </div>
             `).join("");
         }
@@ -799,6 +817,7 @@
                         </div>
                         <div class="commit-actions">
                             <button class="checkout-btn" onclick="event.stopPropagation();showCheckoutModal('${commit.id}')">⎇ checkout</button>
+                            <button class="checkout-btn delete-commit-btn" onclick="event.stopPropagation();deleteCommit('${commit.id}')" title="Delete commit">🗑</button>
                         </div>
                         <div class="commit-expand-icon">▶</div>
                     </div>
@@ -1041,6 +1060,28 @@
         function escapeHtml(text) {
             if (!text) return "";
             return text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+        }
+
+        // ============ Delete ============
+
+        async function deleteCommit(commitId) {
+            if (!confirm(`Delete commit ${commitId}? This will remove it from the history.`)) return;
+            const resp = await fetch(`/api/commit/${commitId}`, {method: 'DELETE'});
+            const result = await resp.json();
+            if (result.error) { alert(result.error); return; }
+            await refreshAll();
+        }
+
+        async function deleteBranch(branchName) {
+            if (!confirm(`Delete branch "${branchName}" and all its commits?`)) return;
+            const resp = await fetch(`/api/branch/${branchName}`, {method: 'DELETE'});
+            const result = await resp.json();
+            if (result.error) { alert(result.error); return; }
+            if (activeBranch === branchName) {
+                activeBranch = 'main';
+                document.getElementById('currentBranchBadge').textContent = 'main';
+            }
+            await refreshAll();
         }
 
         // ============ Init ============
