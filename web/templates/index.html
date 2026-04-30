@@ -924,12 +924,12 @@
 
         async function refreshAll() {
             await renderBranches();
+            // Always re-render commit list to replace live-infer card
+            await renderCommitList();
             if (currentView === 'graph') {
                 await renderGraph();
             } else if (currentView === 'workspace') {
                 await loadWorkspaceTree();
-            } else {
-                await renderCommitList();
             }
         }
 
