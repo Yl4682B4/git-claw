@@ -4,6 +4,8 @@ import json
 import uuid
 import time
 import sqlite3
+import re
+import threading
 import requests
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -21,6 +23,21 @@ SYSTEM_PROMPT = (
     "When you need to create, read, or modify files, operate within this workspace directory by default unless the user specifies otherwise."
 )
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gitclaw.db")
+
+# ============ Dangerous Command Confirmation ============
+# Stores pending confirmations: {confirm_id: threading.Event}
+pending_confirms = {}
+pending_confirm_results = {}  # {confirm_id: bool}
+
+
+def is_dangerous_command(command):
+    """Check if a shell command contains dangerous operations like rm."""
+    # Normalize and check for rm command patterns
+    cmd = command.strip()
+    # Match 'rm' as a standalone command (not part of another word like 'chmod')
+    if re.search(r'(?:^|[;&|]|\s)rm\s', cmd) or re.search(r'(?:^|[;&|]|\s)rm$', cmd):
+        return True
+    return False
 
 
 # ============ SQLite Persistence ============
@@ -334,6 +351,36 @@ def run_agent_stream(branch_name, question, max_steps=10):
                 # Emit tool_call event so frontend can display it
                 yield f"data: {json.dumps({'type': 'tool_call', 'name': name, 'args': args}, ensure_ascii=False)}\n\n"
 
+                # Check if this is a dangerous command that needs confirmation
+                needs_confirm = False
+                if name == "exec" and "command" in args and is_dangerous_command(args["command"]):
+                    needs_confirm = True
+
+                if needs_confirm:
+                    # Send confirmation request to frontend and wait
+                    confirm_id = str(uuid.uuid4())[:8]
+                    confirm_event = threading.Event()
+                    pending_confirms[confirm_id] = confirm_event
+                    pending_confirm_results[confirm_id] = None
+
+                    yield f"data: {json.dumps({'type': 'confirm_required', 'confirm_id': confirm_id, 'command': args.get('command', ''), 'message': f'Dangerous command detected: {args.get("command", "")}. Allow execution?'}, ensure_ascii=False)}\n\n"
+
+                    # Wait for user confirmation (timeout 60s)
+                    confirmed = confirm_event.wait(timeout=60)
+
+                    # Clean up
+                    confirm_event_ref = pending_confirms.pop(confirm_id, None)
+                    user_confirmed = pending_confirm_results.pop(confirm_id, False)
+
+                    if not confirmed or not user_confirmed:
+                        # User rejected or timeout
+                        result_str = "[blocked]: Command was rejected by user or timed out."
+                        yield f"data: {json.dumps({'type': 'tool_result', 'name': name, 'result': result_str}, ensure_ascii=False)}\n\n"
+                        tool_msg = {"role": "tool", "tool_call_id": tc["id"], "name": name, "content": result_str}
+                        new_messages.append(tool_msg)
+                        context_messages.append(tool_msg)
+                        continue
+
                 tool = TOOL_MAP.get(name)
                 try:
                     result = tool.execute(**args) if tool else f"Unknown tool: {name}"
@@ -605,6 +652,21 @@ def merge_branch():
         "merged_commits": len(new_commit_ids),
         "new_head": prev_id
     })
+
+
+@app.route("/api/confirm", methods=["POST"])
+def confirm_action():
+    """Receive user confirmation for dangerous commands."""
+    data = request.json
+    confirm_id = data.get("confirm_id")
+    confirmed = data.get("confirmed", False)
+
+    if not confirm_id or confirm_id not in pending_confirms:
+        return jsonify({"error": "Invalid or expired confirm_id"}), 400
+
+    pending_confirm_results[confirm_id] = confirmed
+    pending_confirms[confirm_id].set()  # Wake up the waiting thread
+    return jsonify({"ok": True})
 
 
 @app.route("/api/infer_stream", methods=["POST"])

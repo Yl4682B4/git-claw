@@ -435,6 +435,25 @@
         .detail-label.assistant-label { color: var(--accent-green); }
         .detail-label.tool-call-label { color: var(--accent-orange); }
         .detail-label.tool-result-label { color: var(--accent-green-light); }
+        .detail-label.confirm-label { color: #e74c3c; font-weight: bold; }
+        .confirm-content p { margin: 0 0 12px 0; color: #e74c3c; font-weight: 500; }
+        .confirm-buttons { display: flex; gap: 10px; }
+        .confirm-btn {
+            padding: 6px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+        .confirm-btn:hover { opacity: 0.85; transform: scale(1.02); }
+        .confirm-btn:active { transform: scale(0.98); }
+        .confirm-allow { background: #27ae60; color: #fff; }
+        .confirm-deny { background: #e74c3c; color: #fff; }
+        .confirm-status { font-weight: 600; font-size: 13px; }
+        .confirm-allowed { color: #27ae60; }
+        .confirm-denied { color: #e74c3c; }
 
         .detail-content {
             font-size: 13px;
@@ -1335,6 +1354,13 @@
                             scrollPanel();
                             break;
 
+                        case "confirm_required":
+                            // Show confirmation dialog for dangerous commands
+                            detail.insertAdjacentHTML("beforeend", `<div class="detail-section streaming-section confirm-section"><div class="detail-label confirm-label">⚠️ CONFIRMATION REQUIRED</div><div class="detail-content confirm-content"><p>${escapeHtml(event.message)}</p><div class="confirm-buttons" id="confirm-btns-${event.confirm_id}"><button class="confirm-btn confirm-allow" onclick="handleConfirm('${event.confirm_id}', true)">✅ Allow</button><button class="confirm-btn confirm-deny" onclick="handleConfirm('${event.confirm_id}', false)">❌ Deny</button></div></div></div>`);
+                            updateLiveRecentConvStatus(`⚠️ Waiting for user confirmation...`);
+                            scrollPanel();
+                            break;
+
                         case "thinking":
                             // Next LLM round, reset assistant element
                             if (currentAssistantEl) {
@@ -1433,6 +1459,26 @@
         function truncate(text, maxLen) {
             if (!text) return "";
             return text.length > maxLen ? text.substring(0, maxLen) + "..." : text;
+        }
+
+        // ============ Dangerous Command Confirmation ============
+        async function handleConfirm(confirmId, confirmed) {
+            // Disable buttons after click
+            const btnContainer = document.getElementById(`confirm-btns-${confirmId}`);
+            if (btnContainer) {
+                btnContainer.innerHTML = confirmed
+                    ? '<span class="confirm-status confirm-allowed">✅ Allowed</span>'
+                    : '<span class="confirm-status confirm-denied">❌ Denied</span>';
+            }
+            try {
+                await fetch('/api/confirm', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({confirm_id: confirmId, confirmed: confirmed})
+                });
+            } catch(e) {
+                console.error('Failed to send confirmation:', e);
+            }
         }
 
         function escapeHtml(text) {
