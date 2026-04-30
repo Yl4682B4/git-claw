@@ -1,0 +1,13 @@
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# Workspace
+web/workspace/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
