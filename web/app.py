@@ -467,6 +467,96 @@ def delete_branch(branch_name):
     return jsonify({"ok": True, "deleted": branch_name})
 
 
+@app.route("/api/merge", methods=["POST"])
+def merge_branch():
+    """Merge source branch into target branch by interleaving commits by timestamp.
+
+    This copies commits from the source branch and interleaves them with the
+    target branch's commits in chronological order, forming a single linear history.
+    """
+    data = request.json
+    target_branch = data.get("target_branch")  # current branch (merge INTO)
+    source_branch = data.get("source_branch")  # branch to merge FROM
+
+    if not target_branch or not db_branch_exists(target_branch):
+        return jsonify({"error": "Invalid target branch"}), 400
+    if not source_branch or not db_branch_exists(source_branch):
+        return jsonify({"error": "Invalid source branch"}), 400
+    if target_branch == source_branch:
+        return jsonify({"error": "Cannot merge a branch into itself"}), 400
+
+    # Get full history of both branches (oldest first)
+    target_history = get_branch_history(target_branch, max_commits=9999)
+    source_history = get_branch_history(source_branch, max_commits=9999)
+
+    if not source_history:
+        return jsonify({"error": "Source branch has no commits to merge"}), 400
+
+    # Collect IDs already on target to avoid duplicating shared ancestors
+    target_ids = set(c["id"] for c in target_history)
+
+    # Filter source commits: only those NOT already in target's history
+    source_only = [c for c in source_history if c["id"] not in target_ids]
+
+    if not source_only:
+        return jsonify({"error": "Nothing to merge — all commits already present"}), 400
+
+    # Merge by timestamp: interleave target_history and source_only
+    merged = []
+    i, j = 0, 0
+    while i < len(target_history) and j < len(source_only):
+        if target_history[i]["timestamp"] <= source_only[j]["timestamp"]:
+            merged.append(("keep", target_history[i]))
+            i += 1
+        else:
+            merged.append(("copy", source_only[j]))
+            j += 1
+    while i < len(target_history):
+        merged.append(("keep", target_history[i]))
+        i += 1
+    while j < len(source_only):
+        merged.append(("copy", source_only[j]))
+        j += 1
+
+    # Now rebuild the chain on the target branch.
+    # "keep" commits stay as-is but may need parent_id updated.
+    # "copy" commits get new IDs and are inserted into the target branch.
+    conn = get_db()
+
+    prev_id = None  # track the previous commit in the new chain
+    new_commit_ids = []  # track newly created commit IDs
+
+    for action, commit in merged:
+        if action == "keep":
+            # Update parent_id if it changed
+            if commit["parent_id"] != prev_id:
+                conn.execute("UPDATE commits SET parent_id = ? WHERE id = ?", (prev_id, commit["id"]))
+            prev_id = commit["id"]
+        else:
+            # Copy: create a new commit on the target branch
+            new_id = str(uuid.uuid4())[:8]
+            conn.execute(
+                "INSERT INTO commits (id, branch, parent_id, timestamp, messages) VALUES (?, ?, ?, ?, ?)",
+                (new_id, target_branch, prev_id, commit["timestamp"],
+                 json.dumps(commit["messages"], ensure_ascii=False))
+            )
+            new_commit_ids.append(new_id)
+            prev_id = new_id
+
+    # Update target branch head to the last commit in the merged chain
+    conn.execute("UPDATE branches SET head_commit_id = ? WHERE name = ?", (prev_id, target_branch))
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        "ok": True,
+        "target_branch": target_branch,
+        "source_branch": source_branch,
+        "merged_commits": len(new_commit_ids),
+        "new_head": prev_id
+    })
+
+
 @app.route("/api/infer_stream", methods=["POST"])
 def infer_stream():
     """Run inference with streaming SSE output."""

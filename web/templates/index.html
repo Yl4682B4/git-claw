@@ -479,6 +479,7 @@
         <h2>⎇ Branches</h2>
         <div class="branch-list" id="branchList"></div>
         <button class="btn" onclick="showCheckoutModal(null)" style="margin-top:12px;">+ New Branch</button>
+        <button class="btn" onclick="showMergeModal()" style="margin-top:6px;">⤵ Merge Into</button>
     </div>
 
     <!-- Main -->
@@ -525,6 +526,19 @@
             <div class="modal-actions">
                 <button class="btn" onclick="hideCheckoutModal()">Cancel</button>
                 <button class="btn btn-primary" onclick="doCheckout()">Create Branch</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Merge Modal -->
+    <div class="modal-overlay" id="mergeModal">
+        <div class="modal">
+            <h3>⤵ Merge Branch</h3>
+            <p style="font-size:12px;color:#8b949e;margin-bottom:12px;">Merge a source branch into <strong style="color:#58a6ff;" id="mergeTargetLabel">main</strong> (current branch), interleaving commits by time.</p>
+            <select id="mergeSourceSelect" style="width:100%;padding:10px 14px;border:1px solid #30363d;border-radius:6px;background:#0d1117;color:#c9d1d9;font-size:14px;margin-bottom:12px;outline:none;"></select>
+            <div class="modal-actions">
+                <button class="btn" onclick="hideMergeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="doMerge()">Merge</button>
             </div>
         </div>
     </div>
@@ -1060,6 +1074,41 @@
         function escapeHtml(text) {
             if (!text) return "";
             return text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+        }
+
+        // ============ Merge ============
+
+        async function showMergeModal() {
+            const branches = await fetchBranches();
+            const select = document.getElementById('mergeSourceSelect');
+            document.getElementById('mergeTargetLabel').textContent = activeBranch;
+            select.innerHTML = branches
+                .filter(b => b.name !== activeBranch)
+                .map(b => `<option value="${escapeHtml(b.name)}">${escapeHtml(b.name)} (${b.commit_count} commits)</option>`)
+                .join('');
+            if (select.innerHTML === '') {
+                select.innerHTML = '<option disabled>No other branches available</option>';
+            }
+            document.getElementById('mergeModal').classList.add('show');
+        }
+
+        function hideMergeModal() {
+            document.getElementById('mergeModal').classList.remove('show');
+        }
+
+        async function doMerge() {
+            const source = document.getElementById('mergeSourceSelect').value;
+            if (!source) { alert('Please select a source branch'); return; }
+            const resp = await fetch('/api/merge', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({target_branch: activeBranch, source_branch: source})
+            });
+            const result = await resp.json();
+            if (result.error) { alert(result.error); return; }
+            hideMergeModal();
+            alert(`Merged ${result.merged_commits} commit(s) from "${source}" into "${activeBranch}"`);
+            await refreshAll();
         }
 
         // ============ Delete ============
