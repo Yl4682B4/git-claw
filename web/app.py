@@ -14,7 +14,12 @@ from tools import ALL_TOOLS, TOOL_MAP
 app = Flask(__name__)
 
 API_URL = "http://localhost:1234/v1/chat/completions"
-SYSTEM_PROMPT = "You are a helpful assistant. Use the provided tools to answer questions."
+WORKSPACE_ABS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workspace")
+SYSTEM_PROMPT = (
+    "You are a helpful assistant. Use the provided tools to answer questions.\n"
+    f"You have a workspace directory at: {WORKSPACE_ABS_PATH}\n"
+    "When you need to create, read, or modify files, operate within this workspace directory by default unless the user specifies otherwise."
+)
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gitclaw.db")
 
 
@@ -666,6 +671,65 @@ def branch_tree():
             roots.append(info)
 
     return jsonify(roots)
+
+
+WORKSPACE_DIR = WORKSPACE_ABS_PATH
+
+
+@app.route("/api/workspace/tree", methods=["GET"])
+def workspace_tree():
+    """Return the file tree structure of the workspace directory."""
+    if not os.path.isdir(WORKSPACE_DIR):
+        os.makedirs(WORKSPACE_DIR, exist_ok=True)
+
+    def build_tree(dir_path, rel_prefix=""):
+        entries = []
+        try:
+            items = sorted(os.listdir(dir_path), key=lambda x: (not os.path.isdir(os.path.join(dir_path, x)), x.lower()))
+        except PermissionError:
+            return entries
+        for item in items:
+            if item.startswith('.'):
+                continue
+            full_path = os.path.join(dir_path, item)
+            rel_path = os.path.join(rel_prefix, item) if rel_prefix else item
+            if os.path.isdir(full_path):
+                children = build_tree(full_path, rel_path)
+                entries.append({"name": item, "path": rel_path, "type": "dir", "children": children})
+            else:
+                size = os.path.getsize(full_path)
+                entries.append({"name": item, "path": rel_path, "type": "file", "size": size})
+        return entries
+
+    tree = build_tree(WORKSPACE_DIR)
+    return jsonify(tree)
+
+
+@app.route("/api/workspace/file", methods=["GET"])
+def workspace_file():
+    """Read a file from the workspace directory."""
+    rel_path = request.args.get("path", "")
+    if not rel_path:
+        return jsonify({"error": "path is required"}), 400
+
+    # Prevent directory traversal
+    safe_path = os.path.normpath(os.path.join(WORKSPACE_DIR, rel_path))
+    if not safe_path.startswith(os.path.normpath(WORKSPACE_DIR)):
+        return jsonify({"error": "Invalid path"}), 403
+
+    if not os.path.isfile(safe_path):
+        return jsonify({"error": "File not found"}), 404
+
+    # Determine if file is likely binary
+    try:
+        with open(safe_path, 'r', encoding='utf-8') as f:
+            content = f.read(1024 * 512)  # Max 512KB
+    except (UnicodeDecodeError, ValueError):
+        return jsonify({"error": "Binary file cannot be displayed"}), 400
+
+    # Get file extension for syntax highlighting hint
+    _, ext = os.path.splitext(rel_path)
+    return jsonify({"path": rel_path, "content": content, "extension": ext.lstrip('.')})
 
 
 if __name__ == "__main__":

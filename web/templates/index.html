@@ -461,6 +461,156 @@
             overflow-y: auto;
         }
 
+        /* Workspace panel */
+        .workspace-panel {
+            display: none;
+            flex: 1;
+            overflow: hidden;
+            flex-direction: row;
+        }
+        .workspace-panel.active { display: flex; }
+        .workspace-sidebar {
+            width: 240px;
+            min-width: 200px;
+            border-right: 1px solid var(--border-primary);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: var(--bg-secondary);
+            transition: background 0.3s, border-color 0.3s;
+        }
+        .workspace-tree-header {
+            padding: 10px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border-primary);
+        }
+        .workspace-tree {
+            flex: 1;
+            overflow-y: auto;
+            padding: 6px 0;
+        }
+        .ws-tree-item {
+            display: flex;
+            align-items: center;
+            padding: 4px 12px;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--text-primary);
+            transition: background 0.1s;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .ws-tree-item:hover { background: var(--bg-tertiary); }
+        .ws-tree-item.active { background: var(--accent-blue-bg); color: var(--accent-blue); }
+        .ws-tree-item .ws-icon {
+            margin-right: 6px;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+        .ws-tree-item .ws-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .ws-tree-children {
+            display: none;
+        }
+        .ws-tree-children.expanded {
+            display: block;
+        }
+        .ws-tree-toggle {
+            width: 16px;
+            text-align: center;
+            font-size: 10px;
+            color: var(--text-muted);
+            flex-shrink: 0;
+            margin-right: 2px;
+            transition: transform 0.15s;
+        }
+        .ws-tree-toggle.open {
+            transform: rotate(90deg);
+        }
+        .workspace-editor {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .workspace-editor-header {
+            padding: 8px 16px;
+            border-bottom: 1px solid var(--border-primary);
+            background: var(--bg-secondary);
+            font-size: 12px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.3s, border-color 0.3s;
+        }
+        .workspace-filepath {
+            font-family: monospace;
+            color: var(--text-primary);
+        }
+        .workspace-editor-content {
+            flex: 1;
+            overflow: auto;
+            background: var(--bg-primary);
+            transition: background 0.3s;
+        }
+        .code-view {
+            display: table;
+            width: 100%;
+            font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            tab-size: 4;
+        }
+        .code-line {
+            display: table-row;
+        }
+        .code-line:hover {
+            background: var(--bg-secondary);
+        }
+        .line-number {
+            display: table-cell;
+            width: 50px;
+            min-width: 50px;
+            padding: 0 12px 0 16px;
+            text-align: right;
+            color: var(--text-muted);
+            user-select: none;
+            font-size: 12px;
+            border-right: 1px solid var(--border-secondary);
+            vertical-align: top;
+        }
+        .line-content {
+            display: table-cell;
+            padding: 0 16px;
+            white-space: pre;
+            color: var(--text-primary);
+        }
+        /* Syntax highlighting */
+        .hl-keyword { color: #ff7b72; }
+        .hl-string { color: #a5d6ff; }
+        .hl-comment { color: var(--text-muted); font-style: italic; }
+        .hl-number { color: #79c0ff; }
+        .hl-function { color: #d2a8ff; }
+        .hl-type { color: #7ee787; }
+        .hl-operator { color: #ff7b72; }
+        .hl-decorator { color: #ffa657; }
+        [data-theme="light"] .hl-keyword { color: #cf222e; }
+        [data-theme="light"] .hl-string { color: #0a3069; }
+        [data-theme="light"] .hl-comment { color: #6e7781; font-style: italic; }
+        [data-theme="light"] .hl-number { color: #0550ae; }
+        [data-theme="light"] .hl-function { color: #8250df; }
+        [data-theme="light"] .hl-type { color: #116329; }
+        [data-theme="light"] .hl-operator { color: #cf222e; }
+        [data-theme="light"] .hl-decorator { color: #953800; }
+
         /* Input area at bottom */
         .infer-area {
             padding: 16px 24px;
@@ -572,6 +722,7 @@
         <div class="view-tabs">
             <div class="view-tab active" id="tabBranch" onclick="switchView('branch')">Branch View</div>
             <div class="view-tab" id="tabGraph" onclick="switchView('graph')">Commit Graph</div>
+            <div class="view-tab" id="tabWorkspace" onclick="switchView('workspace')">Workspace</div>
         </div>
 
         <!-- Commit list (branch view) -->
@@ -585,6 +736,22 @@
         <!-- SourceTree-style graph view -->
         <div class="graph-panel" id="graphPanel">
             <div class="graph-container" id="graphContainer"></div>
+        </div>
+
+        <!-- Workspace file explorer -->
+        <div class="workspace-panel" id="workspacePanel">
+            <div class="workspace-sidebar">
+                <div class="workspace-tree-header">📁 Files</div>
+                <div class="workspace-tree" id="workspaceTree"></div>
+            </div>
+            <div class="workspace-editor">
+                <div class="workspace-editor-header" id="workspaceEditorHeader">
+                    <span class="workspace-filepath">Select a file to view</span>
+                </div>
+                <div class="workspace-editor-content" id="workspaceEditorContent">
+                    <div class="empty-state"><div class="icon">📄</div><p>Select a file from the tree to view its contents.</p></div>
+                </div>
+            </div>
         </div>
 
         <!-- Inference input -->
@@ -653,21 +820,26 @@
             await renderBranches();
             if (currentView === 'graph') {
                 await renderGraph();
+            } else if (currentView === 'workspace') {
+                await loadWorkspaceTree();
             } else {
                 await renderCommitList();
             }
         }
 
-        let currentView = 'branch'; // 'branch' or 'graph'
+        let currentView = 'branch'; // 'branch', 'graph', or 'workspace'
         const BRANCH_COLORS = ['#58a6ff','#3fb950','#f0883e','#bc8cff','#f778ba','#79c0ff','#7ee787','#d2a8ff','#ff7b72','#ffa657'];
 
         function switchView(view) {
             currentView = view;
             document.getElementById('tabBranch').classList.toggle('active', view === 'branch');
             document.getElementById('tabGraph').classList.toggle('active', view === 'graph');
+            document.getElementById('tabWorkspace').classList.toggle('active', view === 'workspace');
             document.getElementById('commitListPanel').classList.toggle('active', view === 'branch');
             document.getElementById('graphPanel').classList.toggle('active', view === 'graph');
+            document.getElementById('workspacePanel').classList.toggle('active', view === 'workspace');
             if (view === 'graph') renderGraph();
+            if (view === 'workspace') loadWorkspaceTree();
         }
 
         async function renderBranches() {
@@ -1209,6 +1381,181 @@
                 document.getElementById('currentBranchBadge').textContent = 'main';
             }
             await refreshAll();
+        }
+
+        // ============ Workspace ============
+
+        let wsActiveFile = null;
+
+        async function loadWorkspaceTree() {
+            const resp = await fetch('/api/workspace/tree');
+            const tree = await resp.json();
+            const container = document.getElementById('workspaceTree');
+            if (tree.length === 0) {
+                container.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:12px;">Workspace is empty.<br>Add files to <code>web/workspace/</code></div>';
+                return;
+            }
+            container.innerHTML = renderTreeNodes(tree, 0);
+        }
+
+        function renderTreeNodes(nodes, depth) {
+            let html = '';
+            for (const node of nodes) {
+                const indent = depth * 16;
+                if (node.type === 'dir') {
+                    const id = 'ws-dir-' + node.path.replace(/[^a-zA-Z0-9]/g, '_');
+                    html += `<div class="ws-tree-item" style="padding-left:${12 + indent}px;" onclick="toggleDir('${id}', this)">
+                        <span class="ws-tree-toggle" id="toggle-${id}">▶</span>
+                        <span class="ws-icon">📁</span>
+                        <span class="ws-name">${escapeHtml(node.name)}</span>
+                    </div>`;
+                    html += `<div class="ws-tree-children" id="${id}">`;
+                    html += renderTreeNodes(node.children, depth + 1);
+                    html += `</div>`;
+                } else {
+                    const icon = getFileIcon(node.name);
+                    html += `<div class="ws-tree-item" style="padding-left:${12 + indent + 18}px;" onclick="openWorkspaceFile('${escapeHtml(node.path)}', this)" data-path="${escapeHtml(node.path)}">
+                        <span class="ws-icon">${icon}</span>
+                        <span class="ws-name">${escapeHtml(node.name)}</span>
+                    </div>`;
+                }
+            }
+            return html;
+        }
+
+        function toggleDir(id, el) {
+            const children = document.getElementById(id);
+            const toggle = document.getElementById('toggle-' + id);
+            if (children.classList.contains('expanded')) {
+                children.classList.remove('expanded');
+                toggle.classList.remove('open');
+            } else {
+                children.classList.add('expanded');
+                toggle.classList.add('open');
+            }
+        }
+
+        function getFileIcon(name) {
+            const ext = name.split('.').pop().toLowerCase();
+            const icons = {
+                'py': '🐍', 'js': '📜', 'ts': '📘', 'html': '🌐', 'css': '🎨',
+                'json': '📋', 'md': '📝', 'txt': '📄', 'yml': '⚙️', 'yaml': '⚙️',
+                'sh': '💻', 'bash': '💻', 'sql': '🗃️', 'go': '🔵', 'rs': '🦀',
+                'java': '☕', 'c': '⚡', 'cpp': '⚡', 'h': '⚡', 'rb': '💎',
+                'php': '🐘', 'swift': '🍎', 'kt': '🟣', 'toml': '⚙️', 'ini': '⚙️',
+                'xml': '📰', 'svg': '🖼️', 'png': '🖼️', 'jpg': '🖼️', 'gif': '🖼️'
+            };
+            return icons[ext] || '📄';
+        }
+
+        async function openWorkspaceFile(path, el) {
+            // Highlight active item
+            document.querySelectorAll('.ws-tree-item.active').forEach(e => e.classList.remove('active'));
+            if (el) el.classList.add('active');
+            wsActiveFile = path;
+
+            const resp = await fetch(`/api/workspace/file?path=${encodeURIComponent(path)}`);
+            const data = await resp.json();
+
+            const header = document.getElementById('workspaceEditorHeader');
+            const content = document.getElementById('workspaceEditorContent');
+
+            if (data.error) {
+                header.innerHTML = `<span class="workspace-filepath">${escapeHtml(path)}</span>`;
+                content.innerHTML = `<div class="empty-state"><p>${escapeHtml(data.error)}</p></div>`;
+                return;
+            }
+
+            header.innerHTML = `<span class="workspace-filepath">${escapeHtml(data.path)}</span><span style="color:var(--text-muted);font-size:11px;">${data.extension || 'txt'}</span>`;
+
+            const lines = data.content.split('\n');
+            const lang = data.extension || '';
+            let codeHtml = '<div class="code-view">';
+            for (let i = 0; i < lines.length; i++) {
+                const highlighted = highlightLine(lines[i], lang);
+                codeHtml += `<div class="code-line"><span class="line-number">${i + 1}</span><span class="line-content">${highlighted}</span></div>`;
+            }
+            codeHtml += '</div>';
+            content.innerHTML = codeHtml;
+        }
+
+        function highlightLine(line, lang) {
+            // Simple syntax highlighting based on language
+            let escaped = escapeHtml(line);
+
+            // Comments
+            if (['py', 'sh', 'bash', 'rb', 'yaml', 'yml', 'toml'].includes(lang)) {
+                escaped = escaped.replace(/^(\s*)(#.*)$/, '$1<span class="hl-comment">$2</span>');
+            }
+            if (['js', 'ts', 'java', 'c', 'cpp', 'go', 'rs', 'swift', 'kt', 'php', 'css'].includes(lang)) {
+                escaped = escaped.replace(/^(\s*)(\/\/.*)$/, '$1<span class="hl-comment">$2</span>');
+            }
+            if (['html', 'xml', 'svg'].includes(lang)) {
+                escaped = escaped.replace(/(&lt;!--.+?--&gt;)/, '<span class="hl-comment">$1</span>');
+            }
+
+            // If line is fully a comment, return early
+            if (escaped.includes('hl-comment')) return escaped;
+
+            // Strings (double and single quotes)
+            escaped = escaped.replace(/(&quot;[^&]*?&quot;|&#x27;[^&]*?&#x27;|"[^"]*?"|'[^']*?')/g, '<span class="hl-string">$1</span>');
+            // Template strings / backtick
+            escaped = escaped.replace(/(`[^`]*?`)/g, '<span class="hl-string">$1</span>');
+
+            // Numbers
+            escaped = escaped.replace(/\b(\d+\.?\d*)\b/g, '<span class="hl-number">$1</span>');
+
+            // Decorators (Python, Java, TS)
+            if (['py', 'java', 'ts', 'kt'].includes(lang)) {
+                escaped = escaped.replace(/^(\s*)(@\w+)/, '$1<span class="hl-decorator">$2</span>');
+            }
+
+            // Keywords by language
+            let keywords = [];
+            if (['py'].includes(lang)) {
+                keywords = ['def', 'class', 'import', 'from', 'return', 'if', 'elif', 'else', 'for', 'while', 'try', 'except', 'finally', 'with', 'as', 'yield', 'lambda', 'pass', 'break', 'continue', 'raise', 'and', 'or', 'not', 'in', 'is', 'None', 'True', 'False', 'async', 'await', 'self'];
+            } else if (['js', 'ts'].includes(lang)) {
+                keywords = ['const', 'let', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'break', 'continue', 'class', 'extends', 'import', 'export', 'from', 'default', 'new', 'this', 'super', 'try', 'catch', 'finally', 'throw', 'async', 'await', 'yield', 'typeof', 'instanceof', 'null', 'undefined', 'true', 'false', 'of', 'in'];
+            } else if (['java', 'kt'].includes(lang)) {
+                keywords = ['public', 'private', 'protected', 'class', 'interface', 'extends', 'implements', 'return', 'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'break', 'continue', 'new', 'this', 'super', 'try', 'catch', 'finally', 'throw', 'import', 'package', 'static', 'final', 'void', 'int', 'long', 'double', 'float', 'boolean', 'String', 'null', 'true', 'false'];
+            } else if (['go'].includes(lang)) {
+                keywords = ['func', 'package', 'import', 'return', 'if', 'else', 'for', 'range', 'switch', 'case', 'break', 'continue', 'go', 'defer', 'chan', 'select', 'struct', 'interface', 'map', 'type', 'const', 'var', 'nil', 'true', 'false', 'make', 'append', 'len'];
+            } else if (['rs'].includes(lang)) {
+                keywords = ['fn', 'let', 'mut', 'pub', 'use', 'mod', 'struct', 'enum', 'impl', 'trait', 'return', 'if', 'else', 'for', 'while', 'loop', 'match', 'break', 'continue', 'self', 'Self', 'super', 'crate', 'async', 'await', 'move', 'where', 'type', 'const', 'static', 'true', 'false', 'None', 'Some', 'Ok', 'Err'];
+            } else if (['c', 'cpp'].includes(lang)) {
+                keywords = ['int', 'char', 'float', 'double', 'void', 'long', 'short', 'unsigned', 'signed', 'const', 'static', 'struct', 'enum', 'union', 'typedef', 'return', 'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'break', 'continue', 'sizeof', 'include', 'define', 'NULL', 'true', 'false', 'class', 'public', 'private', 'protected', 'virtual', 'template', 'namespace', 'using', 'new', 'delete', 'this', 'auto'];
+            } else if (['html'].includes(lang)) {
+                // HTML tags
+                escaped = escaped.replace(/(&lt;\/?)([\w-]+)/g, '$1<span class="hl-keyword">$2</span>');
+                escaped = escaped.replace(/([\w-]+)(=)/g, '<span class="hl-function">$1</span>$2');
+            } else if (['css'].includes(lang)) {
+                escaped = escaped.replace(/([\w-]+)(\s*:)/g, '<span class="hl-function">$1</span>$2');
+            } else if (['sql'].includes(lang)) {
+                keywords = ['SELECT', 'FROM', 'WHERE', 'INSERT', 'INTO', 'VALUES', 'UPDATE', 'SET', 'DELETE', 'CREATE', 'TABLE', 'DROP', 'ALTER', 'INDEX', 'JOIN', 'LEFT', 'RIGHT', 'INNER', 'OUTER', 'ON', 'AND', 'OR', 'NOT', 'NULL', 'IS', 'IN', 'LIKE', 'ORDER', 'BY', 'GROUP', 'HAVING', 'LIMIT', 'AS', 'DISTINCT', 'COUNT', 'SUM', 'AVG', 'MAX', 'MIN', 'PRIMARY', 'KEY', 'FOREIGN', 'REFERENCES', 'IF', 'EXISTS', 'INTEGER', 'TEXT', 'REAL', 'BLOB'];
+            } else if (['sh', 'bash'].includes(lang)) {
+                keywords = ['if', 'then', 'else', 'elif', 'fi', 'for', 'while', 'do', 'done', 'case', 'esac', 'function', 'return', 'exit', 'echo', 'export', 'local', 'readonly', 'shift', 'set', 'unset', 'source', 'true', 'false'];
+            }
+
+            if (keywords.length > 0 && !['html', 'css'].includes(lang)) {
+                const kwPattern = new RegExp('\\b(' + keywords.join('|') + ')\\b', 'g');
+                // Only highlight keywords that are NOT inside an existing span
+                escaped = escaped.replace(kwPattern, (match, kw, offset) => {
+                    // Check if we're inside a span tag
+                    const before = escaped.substring(0, offset);
+                    const openSpans = (before.match(/<span/g) || []).length;
+                    const closeSpans = (before.match(/<\/span>/g) || []).length;
+                    if (openSpans > closeSpans) return match;
+                    return `<span class="hl-keyword">${kw}</span>`;
+                });
+            }
+
+            // Function calls (word followed by parenthesis)
+            escaped = escaped.replace(/\b([a-zA-Z_]\w*)\s*\(/g, (match, name) => {
+                if (keywords.includes(name)) return match;
+                return `<span class="hl-function">${name}</span>(`;
+            });
+
+            return escaped;
         }
 
         // ============ Theme Toggle ============
