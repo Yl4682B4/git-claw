@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GitClaw - Git-like React Agent</title>
+<title>GitClaw - Git-like React Agent</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         :root {
             --bg-primary: #0d1117;
@@ -621,7 +622,7 @@
             align-items: center;
             transition: background 0.3s, border-color 0.3s;
         }
-        .infer-area input {
+        .infer-area textarea {
             flex: 1;
             padding: 12px 16px;
             border: 1px solid var(--border-primary);
@@ -630,11 +631,90 @@
             color: var(--text-primary);
             font-size: 14px;
             outline: none;
+            resize: none;
+            min-height: 44px;
+            max-height: 120px;
+            line-height: 1.4;
+            font-family: inherit;
             transition: background 0.3s, border-color 0.3s, color 0.3s;
         }
-        .infer-area input:focus { border-color: var(--accent-blue-border); }
-        .infer-area input::placeholder { color: var(--text-muted); }
-        .infer-area input:disabled { opacity: 0.5; }
+        .infer-area textarea:focus { border-color: var(--accent-blue-border); }
+        .infer-area textarea::placeholder { color: var(--text-muted); }
+        .infer-area textarea:disabled { opacity: 0.5; }
+
+        /* Recent conversation display */
+        .recent-conv {
+            padding: 10px 24px;
+            border-top: 1px solid var(--border-primary);
+            background: var(--bg-secondary);
+            max-height: 180px;
+            overflow-y: auto;
+            display: none;
+            transition: background 0.3s, border-color 0.3s;
+        }
+        .recent-conv.visible { display: block; }
+        .recent-conv-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+        .recent-conv-item {
+            margin-bottom: 8px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .recent-conv-item:last-child { margin-bottom: 0; }
+        .recent-conv-role {
+            font-weight: 600;
+            font-size: 11px;
+            margin-bottom: 2px;
+        }
+        .recent-conv-role.user-role { color: var(--accent-blue); }
+        .recent-conv-role.assistant-role { color: var(--accent-green); }
+        .recent-conv-content {
+            color: var(--text-primary);
+            word-break: break-word;
+            padding: 6px 10px;
+            background: var(--bg-primary);
+            border-radius: 4px;
+            border: 1px solid var(--border-secondary);
+            max-height: 120px;
+            overflow-y: auto;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+        .recent-conv-content p { margin: 0 0 8px 0; }
+        .recent-conv-content p:last-child { margin-bottom: 0; }
+        .recent-conv-content code {
+            background: var(--bg-tertiary);
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+        .recent-conv-content pre {
+            background: var(--bg-tertiary);
+            padding: 8px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 4px 0;
+        }
+        .recent-conv-content pre code {
+            background: none;
+            padding: 0;
+        }
+        .recent-conv-content ul, .recent-conv-content ol {
+            margin: 4px 0;
+            padding-left: 20px;
+        }
+        .recent-conv-content blockquote {
+            border-left: 3px solid var(--accent-blue);
+            margin: 4px 0;
+            padding-left: 10px;
+            color: var(--text-secondary);
+        }
 
         /* Streaming commit card (in-progress) */
         .streaming-section {
@@ -754,10 +834,17 @@
             </div>
         </div>
 
+        <!-- Recent conversation display -->
+        <div class="recent-conv" id="recentConv">
+            <div class="recent-conv-label">Last Inference</div>
+            <div id="recentConvContent"></div>
+        </div>
+
         <!-- Inference input -->
         <div class="infer-area">
-            <input type="text" id="questionInput" placeholder="Enter prompt to start a new inference commit..."
-                   onkeydown="if(event.key==='Enter')startInference()">
+            <textarea id="questionInput" rows="1" placeholder="Enter prompt to start a new inference commit... (⌘/Ctrl+Enter to send)"
+                      onkeydown="handleInputKeydown(event)"
+                      oninput="autoResizeTextarea(this)"></textarea>
             <button class="btn btn-primary" id="inferBtn" onclick="startInference()">⚡ Infer</button>
         </div>
     </div>
@@ -1097,15 +1184,31 @@
 
         // ============ Streaming Inference ============
 
+        function handleInputKeydown(event) {
+            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault();
+                startInference();
+            }
+        }
+
+        function autoResizeTextarea(el) {
+            el.style.height = 'auto';
+            el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+        }
+
         async function startInference() {
             if (isInferring) return;
             const input = document.getElementById("questionInput");
             const question = input.value.trim();
             if (!question) return;
             input.value = "";
+            input.style.height = 'auto';
 
-            // Switch to branch view so the live card is visible
-            switchView('branch');
+            // Ensure branch view is active if user is already on it (don't force switch)
+            // switchView('branch');
+
+            // Show live recent conv immediately
+            showLiveRecentConv(question);
 
             isInferring = true;
             input.disabled = true;
@@ -1202,6 +1305,8 @@
                             currentAssistantEl.textContent = assistantContent;
                             // Update summary line
                             updateLiveSummary(assistantContent);
+                            // Update live recent conv assistant content
+                            updateLiveRecentConvAssistant(assistantContent);
                             scrollPanel();
                             break;
 
@@ -1218,11 +1323,15 @@
                             if (!meta.querySelector(".commit-tool-badge")) {
                                 meta.insertAdjacentHTML("beforeend", '<span class="commit-tool-badge">🔧 tools used</span>');
                             }
+                            // Update live recent conv status
+                            updateLiveRecentConvStatus(`🔧 Calling: <b>${escapeHtml(event.name)}</b>`);
                             scrollPanel();
                             break;
 
                         case "tool_result":
                             detail.insertAdjacentHTML("beforeend", `<div class="detail-section streaming-section"><div class="detail-label tool-result-label">📋 TOOL RESULT</div><div class="detail-content tool-result-content">${escapeHtml(event.result)}</div></div>`);
+                            // Update live recent conv status
+                            updateLiveRecentConvStatus(`📋 Tool returned, thinking...`);
                             scrollPanel();
                             break;
 
@@ -1233,6 +1342,8 @@
                                 currentAssistantEl = null;
                             }
                             assistantContent = "";
+                            // Update live recent conv status
+                            updateLiveRecentConvStatus(`⏳ Reasoning...`);
                             break;
 
                         case "assistant_done":
@@ -1260,6 +1371,8 @@
                             const timeEl = liveCard.querySelector(".commit-time");
                             if (timeEl) timeEl.textContent = new Date(c.timestamp * 1000).toLocaleString();
                             liveCard.classList.remove("active-infer");
+                            // Finalize recent conversation display with markdown
+                            updateRecentConv(c.messages);
                             break;
                     }
                 }
@@ -1291,6 +1404,7 @@
             activeBranch = name;
             document.getElementById("currentBranchBadge").textContent = name;
             await refreshAll();
+            await loadRecentConv();
         }
 
         function showCheckoutModal(commitId) {
@@ -1579,8 +1693,81 @@
             }
         })();
 
+        // ============ Recent Conversation ============
+
+        function renderMarkdown(text) {
+            if (!text) return '';
+            try {
+                return marked.parse(text);
+            } catch(e) {
+                return escapeHtml(text);
+            }
+        }
+
+        let liveRecentFinalContent = "";
+
+        function showLiveRecentConv(question) {
+            liveRecentFinalContent = "";
+            const container = document.getElementById('recentConvContent');
+            container.innerHTML = `
+                <div class="recent-conv-item"><div class="recent-conv-role user-role">USER</div><div class="recent-conv-content">${escapeHtml(question)}</div></div>
+                <div class="recent-conv-item"><div class="recent-conv-role assistant-role">ASSISTANT</div><div class="recent-conv-content" id="liveRecentAssistant"><span class="streaming-cursor" style="color:var(--text-muted)">⏳ Inferring...</span></div></div>
+            `;
+            document.getElementById('recentConv').classList.add('visible');
+        }
+
+        function updateLiveRecentConvAssistant(content) {
+            const el = document.getElementById('liveRecentAssistant');
+            if (el) {
+                liveRecentFinalContent = content;
+                el.innerHTML = `<span>${escapeHtml(content)}</span><span class="streaming-cursor"></span>`;
+            }
+        }
+
+        function updateLiveRecentConvStatus(statusHtml) {
+            const el = document.getElementById('liveRecentAssistant');
+            if (el) {
+                if (liveRecentFinalContent) {
+                    el.innerHTML = `<span>${escapeHtml(liveRecentFinalContent)}</span><br/><span style="color:var(--text-muted);font-size:11px">${statusHtml}</span>`;
+                } else {
+                    el.innerHTML = `<span style="color:var(--text-muted);font-size:11px">${statusHtml}</span>`;
+                }
+            }
+        }
+
+        function updateRecentConv(messages) {
+            if (!messages || messages.length === 0) return;
+            const userMsg = messages.find(m => m.role === 'user');
+            const assistantMsgs = messages.filter(m => m.role === 'assistant' && m.content && !m.tool_calls);
+            const finalAssistant = assistantMsgs.length > 0 ? assistantMsgs[assistantMsgs.length - 1] : null;
+
+            if (!userMsg && !finalAssistant) return;
+
+            const container = document.getElementById('recentConvContent');
+            let html = '';
+            if (userMsg) {
+                html += `<div class="recent-conv-item"><div class="recent-conv-role user-role">USER</div><div class="recent-conv-content">${escapeHtml(userMsg.content)}</div></div>`;
+            }
+            if (finalAssistant) {
+                html += `<div class="recent-conv-item"><div class="recent-conv-role assistant-role">ASSISTANT</div><div class="recent-conv-content">${renderMarkdown(finalAssistant.content)}</div></div>`;
+            }
+            container.innerHTML = html;
+            document.getElementById('recentConv').classList.add('visible');
+        }
+
+        async function loadRecentConv() {
+            const history = await fetchHistory(activeBranch, 1);
+            if (history.length > 0) {
+                const lastCommit = history[history.length - 1];
+                updateRecentConv(lastCommit.messages);
+            } else {
+                document.getElementById('recentConv').classList.remove('visible');
+            }
+        }
+
         // ============ Init ============
         refreshAll();
+        loadRecentConv();
     </script>
 </body>
 </html>

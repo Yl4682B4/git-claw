@@ -198,7 +198,7 @@ def call_llm_stream(messages):
         "temperature": 0,
         "stream": True
     }
-    resp = requests.post(API_URL, json=payload, headers={"Content-Type": "application/json"}, timeout=120, stream=True)
+    resp = requests.post(API_URL, json=payload, headers={"Content-Type": "application/json"}, timeout=300, stream=True)
     resp.raise_for_status()
     return resp
 
@@ -211,40 +211,45 @@ def parse_stream_response(response):
     # Force UTF-8 encoding to avoid Chinese character garbling
     response.encoding = "utf-8"
 
-    for line in response.iter_lines(decode_unicode=True):
-        if not line or not line.startswith("data: "):
-            continue
-        data_str = line[6:]
-        if data_str.strip() == "[DONE]":
-            break
-        try:
-            data = json.loads(data_str)
-        except json.JSONDecodeError:
-            continue
+    try:
+        for line in response.iter_lines(decode_unicode=True):
+            if not line or not line.startswith("data: "):
+                continue
+            data_str = line[6:]
+            if data_str.strip() == "[DONE]":
+                break
+            try:
+                data = json.loads(data_str)
+            except json.JSONDecodeError:
+                continue
 
-        delta = data.get("choices", [{}])[0].get("delta", {})
+            delta = data.get("choices", [{}])[0].get("delta", {})
 
-        # Content delta
-        if delta.get("content"):
-            content += delta["content"]
-            yield {"type": "content_delta", "content": delta["content"]}
+            # Content delta
+            if delta.get("content"):
+                content += delta["content"]
+                yield {"type": "content_delta", "content": delta["content"]}
 
-        # Tool calls delta
-        if delta.get("tool_calls"):
-            for tc_delta in delta["tool_calls"]:
-                idx = tc_delta["index"]
-                if idx not in tool_calls_map:
-                    tool_calls_map[idx] = {
-                        "id": tc_delta.get("id", ""),
-                        "function": {"name": "", "arguments": ""}
-                    }
-                if tc_delta.get("id"):
-                    tool_calls_map[idx]["id"] = tc_delta["id"]
-                func_delta = tc_delta.get("function", {})
-                if func_delta.get("name"):
-                    tool_calls_map[idx]["function"]["name"] += func_delta["name"]
-                if func_delta.get("arguments"):
-                    tool_calls_map[idx]["function"]["arguments"] += func_delta["arguments"]
+            # Tool calls delta
+            if delta.get("tool_calls"):
+                for tc_delta in delta["tool_calls"]:
+                    idx = tc_delta["index"]
+                    if idx not in tool_calls_map:
+                        tool_calls_map[idx] = {
+                            "id": tc_delta.get("id", ""),
+                            "function": {"name": "", "arguments": ""}
+                        }
+                    if tc_delta.get("id"):
+                        tool_calls_map[idx]["id"] = tc_delta["id"]
+                    func_delta = tc_delta.get("function", {})
+                    if func_delta.get("name"):
+                        tool_calls_map[idx]["function"]["name"] += func_delta["name"]
+                    if func_delta.get("arguments"):
+                        tool_calls_map[idx]["function"]["arguments"] += func_delta["arguments"]
+                # Yield a keepalive so the SSE stream doesn't timeout
+                yield {"type": "keepalive"}
+    finally:
+        response.close()
 
     # Yield final assembled message
     if tool_calls_map:
@@ -261,79 +266,119 @@ def run_agent_stream(branch_name, question, max_steps=10):
     context_messages.append(user_msg)
     new_messages = [user_msg]
 
-    for step in range(max_steps):
-        response = call_llm_stream(context_messages)
-
-        final_msg = None
-        for event in parse_stream_response(response):
-            if event["type"] == "content_delta":
-                yield f"data: {json.dumps({'type': 'content_delta', 'content': event['content']}, ensure_ascii=False)}\n\n"
-            elif event["type"] == "message_done":
-                final_msg = event
-
-        if not final_msg:
-            break
-
-        tool_calls = final_msg.get("tool_calls")
-        content = final_msg.get("content", "")
-
-        if not tool_calls:
-            # Final answer
-            assistant_msg = {"role": "assistant", "content": content}
-            new_messages.append(assistant_msg)
-            yield f"data: {json.dumps({'type': 'assistant_done', 'content': content}, ensure_ascii=False)}\n\n"
-            break
-
-        # Build the assistant message with tool_calls for context
-        # Ensure each tool_call has the required "type": "function" field
-        formatted_tool_calls = []
-        for tc in tool_calls:
-            formatted_tool_calls.append({
-                "id": tc["id"],
-                "type": "function",
-                "function": tc["function"]
-            })
-        assistant_msg = {
-            "role": "assistant",
-            "content": content or None,
-            "tool_calls": formatted_tool_calls
-        }
-        new_messages.append(assistant_msg)
-        context_messages.append(assistant_msg)
-
-        # Execute each tool call
-        for tc in tool_calls:
-            name = tc["function"]["name"]
-            args_str = tc["function"]["arguments"]
+    try:
+        for step in range(max_steps):
             try:
-                args = json.loads(args_str)
-            except json.JSONDecodeError:
-                args = {}
+                response = call_llm_stream(context_messages)
+            except Exception as e:
+                error_msg = f"LLM request failed: {str(e)}"
+                new_messages.append({"role": "assistant", "content": error_msg})
+                yield f"data: {json.dumps({'type': 'assistant_done', 'content': error_msg}, ensure_ascii=False)}\n\n"
+                break
 
-            # Emit tool_call event so frontend can display it
-            yield f"data: {json.dumps({'type': 'tool_call', 'name': name, 'args': args}, ensure_ascii=False)}\n\n"
+            final_msg = None
+            try:
+                for event in parse_stream_response(response):
+                    if event["type"] == "content_delta":
+                        yield f"data: {json.dumps({'type': 'content_delta', 'content': event['content']}, ensure_ascii=False)}\n\n"
+                    elif event["type"] == "keepalive":
+                        # SSE comment to keep connection alive
+                        yield ": keepalive\n\n"
+                    elif event["type"] == "message_done":
+                        final_msg = event
+            except Exception as e:
+                error_msg = f"Stream parsing error: {str(e)}"
+                new_messages.append({"role": "assistant", "content": error_msg})
+                yield f"data: {json.dumps({'type': 'assistant_done', 'content': error_msg}, ensure_ascii=False)}\n\n"
+                break
 
-            tool = TOOL_MAP.get(name)
-            result = tool.execute(**args) if tool else f"Unknown tool: {name}"
-            result_str = str(result)
+            if not final_msg:
+                break
 
-            # Emit tool_result event
-            yield f"data: {json.dumps({'type': 'tool_result', 'name': name, 'result': result_str}, ensure_ascii=False)}\n\n"
+            tool_calls = final_msg.get("tool_calls")
+            content = final_msg.get("content", "")
 
-            tool_msg = {"role": "tool", "tool_call_id": tc["id"], "name": name, "content": result_str}
-            new_messages.append(tool_msg)
-            context_messages.append(tool_msg)
+            if not tool_calls:
+                # Final answer
+                assistant_msg = {"role": "assistant", "content": content}
+                new_messages.append(assistant_msg)
+                yield f"data: {json.dumps({'type': 'assistant_done', 'content': content}, ensure_ascii=False)}\n\n"
+                break
 
-        # Signal that we're continuing to next LLM call
-        yield f"data: {json.dumps({'type': 'thinking'}, ensure_ascii=False)}\n\n"
-    else:
-        # Max steps reached
-        new_messages.append({"role": "assistant", "content": "⚠️ Max reasoning steps reached."})
-        yield f"data: {json.dumps({'type': 'assistant_done', 'content': '⚠️ Max reasoning steps reached.'}, ensure_ascii=False)}\n\n"
+            # Build the assistant message with tool_calls for context
+            # Ensure each tool_call has the required "type": "function" field
+            formatted_tool_calls = []
+            for tc in tool_calls:
+                formatted_tool_calls.append({
+                    "id": tc["id"],
+                    "type": "function",
+                    "function": tc["function"]
+                })
+            assistant_msg = {
+                "role": "assistant",
+                "content": content or None,
+                "tool_calls": formatted_tool_calls
+            }
+            new_messages.append(assistant_msg)
+            context_messages.append(assistant_msg)
 
-    # Commit
-    commit = create_commit(branch_name, new_messages)
-    yield f"data: {json.dumps({'type': 'commit', 'commit': commit}, ensure_ascii=False)}\n\n"
+            # Execute each tool call
+            for tc in tool_calls:
+                name = tc["function"]["name"]
+                args_str = tc["function"]["arguments"]
+                try:
+                    args = json.loads(args_str)
+                except json.JSONDecodeError:
+                    args = {}
+
+                # Emit tool_call event so frontend can display it
+                yield f"data: {json.dumps({'type': 'tool_call', 'name': name, 'args': args}, ensure_ascii=False)}\n\n"
+
+                tool = TOOL_MAP.get(name)
+                try:
+                    result = tool.execute(**args) if tool else f"Unknown tool: {name}"
+                except Exception as e:
+                    result = f"[tool error]: {str(e)}"
+                result_str = str(result)
+
+                # Emit tool_result event
+                yield f"data: {json.dumps({'type': 'tool_result', 'name': name, 'result': result_str}, ensure_ascii=False)}\n\n"
+
+                tool_msg = {"role": "tool", "tool_call_id": tc["id"], "name": name, "content": result_str}
+                new_messages.append(tool_msg)
+                context_messages.append(tool_msg)
+
+            # Signal that we're continuing to next LLM call
+            yield f"data: {json.dumps({'type': 'thinking'}, ensure_ascii=False)}\n\n"
+        else:
+            # Max steps reached
+            new_messages.append({"role": "assistant", "content": "⚠️ Max reasoning steps reached."})
+            yield f"data: {json.dumps({'type': 'assistant_done', 'content': '⚠️ Max reasoning steps reached.'}, ensure_ascii=False)}\n\n"
+
+        # Commit
+        commit = create_commit(branch_name, new_messages)
+        yield f"data: {json.dumps({'type': 'commit', 'commit': commit}, ensure_ascii=False)}\n\n"
+    except GeneratorExit:
+        # Client disconnected, still try to save the commit
+        try:
+            create_commit(branch_name, new_messages)
+        except Exception:
+            pass
+        return
+    except Exception as e:
+        # Catch-all: emit error to frontend
+        import traceback
+        traceback.print_exc()
+        error_msg = f"Internal error: {str(e)}"
+        yield f"data: {json.dumps({'type': 'error', 'message': error_msg}, ensure_ascii=False)}\n\n"
+        # Still try to commit what we have
+        try:
+            if len(new_messages) > 1:
+                new_messages.append({"role": "assistant", "content": error_msg})
+                create_commit(branch_name, new_messages)
+        except Exception:
+            pass
+
     yield "data: [DONE]\n\n"
 
 
@@ -733,4 +778,4 @@ def workspace_file():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=8171)
+    app.run(debug=True, port=8171, use_reloader=False, threaded=True)
