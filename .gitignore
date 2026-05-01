@@ -6,6 +6,9 @@
 # Workspace
 web/workspace/
 
+# Memory
+web/memory/
+
 # Python
 __pycache__/
 *.pyc

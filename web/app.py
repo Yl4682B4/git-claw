@@ -17,10 +17,13 @@ app = Flask(__name__)
 
 API_URL = "http://localhost:1234/v1/chat/completions"
 WORKSPACE_ABS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workspace")
+MEMORY_ABS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "memory")
+SKILL_ABS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skill")
 SYSTEM_PROMPT = (
     "You are a helpful assistant. Use the provided tools to answer questions.\n"
     f"You have a workspace directory at: {WORKSPACE_ABS_PATH}\n"
-    "When you need to create, read, or modify files, operate within this workspace directory by default unless the user specifies otherwise."
+    "When you need to create, read, or modify files, operate within this workspace directory by default unless the user specifies otherwise.\n"
+    "You may have skills injected below that provide additional capabilities and knowledge."
 )
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gitclaw.db")
 
@@ -179,10 +182,37 @@ def sanitize_message(msg):
     return msg
 
 
-def build_messages_from_history(branch_name, max_commits=10):
+def load_selected_skills(skill_paths):
+    """Load specific skill files by their relative paths and return combined content."""
+    skill_dir = SKILL_ABS_PATH
+    if not os.path.isdir(skill_dir) or not skill_paths:
+        return ""
+    skill_texts = []
+    for rel_path in skill_paths:
+        safe_path = os.path.normpath(os.path.join(skill_dir, rel_path))
+        if not safe_path.startswith(os.path.normpath(skill_dir)):
+            continue
+        if not os.path.isfile(safe_path):
+            continue
+        try:
+            with open(safe_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            skill_texts.append(f"--- skill: {rel_path} ---\n{content}")
+        except Exception:
+            continue
+    return "\n\n".join(skill_texts)
+
+
+def build_messages_from_history(branch_name, max_commits=10, selected_skills=None):
     """Build the LLM message list from branch history."""
     history = get_branch_history(branch_name, max_commits)
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    # Build system prompt with selected skills injected
+    system_content = SYSTEM_PROMPT
+    if selected_skills:
+        skills_content = load_selected_skills(selected_skills)
+        if skills_content:
+            system_content += "\n\n# Skills\n\n" + skills_content
+    messages = [{"role": "system", "content": system_content}]
     for commit in history:
         for msg in commit["messages"]:
             messages.append(sanitize_message(msg))
@@ -276,9 +306,9 @@ def parse_stream_response(response):
         yield {"type": "message_done", "content": content, "tool_calls": None}
 
 
-def run_agent_stream(branch_name, question, max_steps=10):
+def run_agent_stream(branch_name, question, max_steps=10, selected_skills=None):
     """Generator that yields SSE events during agent execution."""
-    context_messages = build_messages_from_history(branch_name)
+    context_messages = build_messages_from_history(branch_name, selected_skills=selected_skills)
     user_msg = {"role": "user", "content": question}
     context_messages.append(user_msg)
     new_messages = [user_msg]
@@ -676,6 +706,7 @@ def infer_stream():
     branch_name = data.get("branch")
     question = data.get("question")
     max_steps = data.get("max_steps", 10)
+    selected_skills = data.get("skills", [])
 
     if not branch_name or not db_branch_exists(branch_name):
         return jsonify({"error": "Invalid branch"}), 400
@@ -683,7 +714,7 @@ def infer_stream():
         return jsonify({"error": "question is required"}), 400
 
     def generate():
-        yield from run_agent_stream(branch_name, question, max_steps)
+        yield from run_agent_stream(branch_name, question, max_steps, selected_skills=selected_skills)
 
     return Response(
         stream_with_context(generate()),
@@ -837,6 +868,366 @@ def workspace_file():
     # Get file extension for syntax highlighting hint
     _, ext = os.path.splitext(rel_path)
     return jsonify({"path": rel_path, "content": content, "extension": ext.lstrip('.')})
+
+
+# ============ Memory Routes ============
+
+MEMORY_DIR = MEMORY_ABS_PATH
+
+
+@app.route("/api/memory/tree", methods=["GET"])
+def memory_tree():
+    """Return the file tree structure of the memory directory."""
+    if not os.path.isdir(MEMORY_DIR):
+        os.makedirs(MEMORY_DIR, exist_ok=True)
+
+    def build_tree(dir_path, rel_prefix=""):
+        entries = []
+        try:
+            items = sorted(os.listdir(dir_path), key=lambda x: (not os.path.isdir(os.path.join(dir_path, x)), x.lower()))
+        except PermissionError:
+            return entries
+        for item in items:
+            if item.startswith('.'):
+                continue
+            full_path = os.path.join(dir_path, item)
+            rel_path = os.path.join(rel_prefix, item) if rel_prefix else item
+            if os.path.isdir(full_path):
+                children = build_tree(full_path, rel_path)
+                entries.append({"name": item, "path": rel_path, "type": "dir", "children": children})
+            else:
+                size = os.path.getsize(full_path)
+                entries.append({"name": item, "path": rel_path, "type": "file", "size": size})
+        return entries
+
+    tree = build_tree(MEMORY_DIR)
+    return jsonify(tree)
+
+
+@app.route("/api/memory/file", methods=["GET"])
+def memory_file():
+    """Read a file from the memory directory."""
+    rel_path = request.args.get("path", "")
+    if not rel_path:
+        return jsonify({"error": "path is required"}), 400
+
+    safe_path = os.path.normpath(os.path.join(MEMORY_DIR, rel_path))
+    if not safe_path.startswith(os.path.normpath(MEMORY_DIR)):
+        return jsonify({"error": "Invalid path"}), 403
+
+    if not os.path.isfile(safe_path):
+        return jsonify({"error": "File not found"}), 404
+
+    try:
+        with open(safe_path, 'r', encoding='utf-8') as f:
+            content = f.read(1024 * 512)
+    except (UnicodeDecodeError, ValueError):
+        return jsonify({"error": "Binary file cannot be displayed"}), 400
+
+    _, ext = os.path.splitext(rel_path)
+    return jsonify({"path": rel_path, "content": content, "extension": ext.lstrip('.')})
+
+
+@app.route("/api/memory/import", methods=["POST"])
+def memory_import():
+    """Import a memory file. Creates the file at the specified path with given content.
+    If generate_brief is false, only writes the file without brief generation."""
+    data = request.json
+    rel_path = data.get("path", "").strip()
+    content = data.get("content", "")
+    skip_brief = data.get("skip_brief", False)
+
+    if not rel_path:
+        return jsonify({"error": "path is required"}), 400
+
+    # Prevent directory traversal
+    safe_path = os.path.normpath(os.path.join(MEMORY_DIR, rel_path))
+    if not safe_path.startswith(os.path.normpath(MEMORY_DIR)):
+        return jsonify({"error": "Invalid path"}), 403
+
+    # Create parent directories if needed
+    parent_dir = os.path.dirname(safe_path)
+    os.makedirs(parent_dir, exist_ok=True)
+
+    # Write the memory file
+    with open(safe_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+
+    if skip_brief:
+        return jsonify({"ok": True, "path": rel_path, "step": "written"})
+
+    # Trigger brief generation for the directory chain
+    try:
+        generate_briefs_upward(parent_dir)
+    except Exception as e:
+        # Brief generation is best-effort; don't fail the import
+        print(f"Brief generation error: {e}")
+
+    return jsonify({"ok": True, "path": rel_path, "step": "complete"})
+
+
+def generate_briefs_upward(start_dir):
+    """Generate brief.md for start_dir and recursively for each parent up to MEMORY_DIR."""
+    current = os.path.normpath(start_dir)
+    memory_root = os.path.normpath(MEMORY_DIR)
+
+    while current.startswith(memory_root) and len(current) >= len(memory_root):
+        generate_brief_for_dir(current)
+        if current == memory_root:
+            break
+        current = os.path.dirname(current)
+
+
+def generate_brief_for_dir(dir_path):
+    """Generate a brief.md for a single directory by summarizing its contents with LLM."""
+    if not os.path.isdir(dir_path):
+        return
+
+    # Collect content to summarize
+    parts = []
+
+    try:
+        items = sorted(os.listdir(dir_path))
+    except PermissionError:
+        return
+
+    for item in items:
+        if item == 'brief.md':
+            continue
+        full_path = os.path.join(dir_path, item)
+
+        if os.path.isdir(full_path):
+            # Use sub-directory's brief.md if available
+            sub_brief = os.path.join(full_path, 'brief.md')
+            if os.path.isfile(sub_brief):
+                try:
+                    with open(sub_brief, 'r', encoding='utf-8') as f:
+                        brief_content = f.read(4096)
+                    parts.append(f"[Directory: {item}]\n{brief_content}")
+                except Exception:
+                    parts.append(f"[Directory: {item}] (brief unavailable)")
+            else:
+                parts.append(f"[Directory: {item}] (no brief)")
+        elif os.path.isfile(full_path):
+            try:
+                with open(full_path, 'r', encoding='utf-8') as f:
+                    file_content = f.read(4096)
+                parts.append(f"[File: {item}]\n{file_content}")
+            except Exception:
+                parts.append(f"[File: {item}] (unreadable)")
+
+    if not parts:
+        return
+
+    combined = "\n\n---\n\n".join(parts)
+
+    # Call LLM to generate brief
+    prompt = (
+        "You are a concise summarizer. Below are the contents of a directory (files and sub-directory briefs). "
+        "Generate a brief summary (in a brief.md format) that captures the key information and purpose of this directory's contents. "
+        "Keep it concise but informative. Output only the summary, no extra explanation.\n\n"
+        f"Directory contents:\n\n{combined}"
+    )
+
+    try:
+        resp = requests.post(API_URL, json={
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0,
+            "stream": False
+        }, headers={"Content-Type": "application/json"}, timeout=60)
+        resp.raise_for_status()
+        result = resp.json()
+        brief_text = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+    except Exception as e:
+        brief_text = f"(Auto-summary failed: {e})"
+
+    # Write brief.md
+    brief_path = os.path.join(dir_path, 'brief.md')
+    with open(brief_path, 'w', encoding='utf-8') as f:
+        f.write(brief_text)
+
+
+@app.route("/api/memory/delete", methods=["POST"])
+def memory_delete():
+    """Delete a memory file or directory."""
+    data = request.json
+    rel_path = data.get("path", "").strip()
+
+    if not rel_path:
+        return jsonify({"error": "Path is required"}), 400
+
+    safe_path = os.path.normpath(os.path.join(MEMORY_DIR, rel_path))
+    if not safe_path.startswith(os.path.normpath(MEMORY_DIR)):
+        return jsonify({"error": "Invalid path"}), 403
+
+    if not os.path.exists(safe_path):
+        return jsonify({"error": "Path not found"}), 404
+
+    import shutil
+    try:
+        if os.path.isdir(safe_path):
+            shutil.rmtree(safe_path)
+        else:
+            os.remove(safe_path)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/memory/rebuild_brief", methods=["POST"])
+def memory_rebuild_brief():
+    """Manually trigger brief rebuild for a specific directory path."""
+    data = request.json
+    rel_path = data.get("path", "").strip()
+
+    if rel_path:
+        safe_path = os.path.normpath(os.path.join(MEMORY_DIR, rel_path))
+        if not safe_path.startswith(os.path.normpath(MEMORY_DIR)):
+            return jsonify({"error": "Invalid path"}), 403
+    else:
+        safe_path = MEMORY_DIR
+
+    if not os.path.isdir(safe_path):
+        return jsonify({"error": "Directory not found"}), 404
+
+    try:
+        generate_briefs_upward(safe_path)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({"ok": True})
+
+
+# ============ Skill Routes ============
+
+SKILL_DIR = SKILL_ABS_PATH
+
+
+@app.route("/api/skill/tree", methods=["GET"])
+def skill_tree():
+    """Return the file tree structure of the skill directory."""
+    if not os.path.isdir(SKILL_DIR):
+        os.makedirs(SKILL_DIR, exist_ok=True)
+
+    def build_tree(dir_path, rel_prefix=""):
+        entries = []
+        try:
+            items = sorted(os.listdir(dir_path), key=lambda x: (not os.path.isdir(os.path.join(dir_path, x)), x.lower()))
+        except PermissionError:
+            return entries
+        for item in items:
+            if item.startswith('.'):
+                continue
+            full_path = os.path.join(dir_path, item)
+            rel_path = os.path.join(rel_prefix, item) if rel_prefix else item
+            if os.path.isdir(full_path):
+                children = build_tree(full_path, rel_path)
+                entries.append({"name": item, "path": rel_path, "type": "dir", "children": children})
+            else:
+                size = os.path.getsize(full_path)
+                entries.append({"name": item, "path": rel_path, "type": "file", "size": size})
+        return entries
+
+    tree = build_tree(SKILL_DIR)
+    return jsonify(tree)
+
+
+@app.route("/api/skill/list", methods=["GET"])
+def skill_list():
+    """Return a flat list of all skill file paths (for checkbox selection)."""
+    if not os.path.isdir(SKILL_DIR):
+        return jsonify([])
+    result = []
+    for root, dirs, files in os.walk(SKILL_DIR):
+        dirs[:] = [d for d in dirs if not d.startswith('.')]
+        for fname in sorted(files):
+            if fname.startswith('.') or not fname.endswith('.md'):
+                continue
+            fpath = os.path.join(root, fname)
+            rel = os.path.relpath(fpath, SKILL_DIR)
+            result.append(rel)
+    return jsonify(result)
+
+
+@app.route("/api/skill/file", methods=["GET"])
+def skill_file():
+    """Read a file from the skill directory."""
+    rel_path = request.args.get("path", "")
+    if not rel_path:
+        return jsonify({"error": "path is required"}), 400
+
+    safe_path = os.path.normpath(os.path.join(SKILL_DIR, rel_path))
+    if not safe_path.startswith(os.path.normpath(SKILL_DIR)):
+        return jsonify({"error": "Invalid path"}), 403
+
+    if not os.path.isfile(safe_path):
+        return jsonify({"error": "File not found"}), 404
+
+    try:
+        with open(safe_path, 'r', encoding='utf-8') as f:
+            content = f.read(1024 * 512)
+    except (UnicodeDecodeError, ValueError):
+        return jsonify({"error": "Binary file cannot be displayed"}), 400
+
+    _, ext = os.path.splitext(rel_path)
+    return jsonify({"path": rel_path, "content": content, "extension": ext.lstrip('.')})
+
+
+@app.route("/api/skill/import", methods=["POST"])
+def skill_import():
+    """Import a skill file. Creates the .md file at the specified path."""
+    data = request.json
+    rel_path = data.get("path", "").strip()
+    content = data.get("content", "")
+
+    if not rel_path:
+        return jsonify({"error": "path is required"}), 400
+
+    # Ensure .md extension
+    if not rel_path.endswith('.md'):
+        rel_path += '.md'
+
+    # Prevent directory traversal
+    safe_path = os.path.normpath(os.path.join(SKILL_DIR, rel_path))
+    if not safe_path.startswith(os.path.normpath(SKILL_DIR)):
+        return jsonify({"error": "Invalid path"}), 403
+
+    # Create parent directories if needed
+    parent_dir = os.path.dirname(safe_path)
+    os.makedirs(parent_dir, exist_ok=True)
+
+    # Write the skill file
+    with open(safe_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+
+    return jsonify({"ok": True, "path": rel_path})
+
+
+@app.route("/api/skill/delete", methods=["POST"])
+def skill_delete():
+    """Delete a skill file or directory."""
+    data = request.json
+    rel_path = data.get("path", "").strip()
+
+    if not rel_path:
+        return jsonify({"error": "Path is required"}), 400
+
+    safe_path = os.path.normpath(os.path.join(SKILL_DIR, rel_path))
+    if not safe_path.startswith(os.path.normpath(SKILL_DIR)):
+        return jsonify({"error": "Invalid path"}), 403
+
+    if not os.path.exists(safe_path):
+        return jsonify({"error": "Path not found"}), 404
+
+    import shutil
+    try:
+        if os.path.isdir(safe_path):
+            shutil.rmtree(safe_path)
+        else:
+            os.remove(safe_path)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":

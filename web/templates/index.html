@@ -489,6 +489,165 @@
             flex-direction: row;
         }
         .workspace-panel.active { display: flex; }
+        .memory-panel {
+            display: none;
+            flex: 1;
+            overflow: hidden;
+            flex-direction: row;
+        }
+        .memory-panel.active { display: flex; }
+        .skill-panel {
+            display: none;
+            flex: 1;
+            overflow: hidden;
+            flex-direction: row;
+        }
+        .skill-panel.active { display: flex; }
+        .memory-sidebar {
+            width: 240px;
+            min-width: 200px;
+            border-right: 1px solid var(--border-primary);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: var(--bg-secondary);
+            transition: background 0.3s, border-color 0.3s;
+        }
+        .memory-tree-header {
+            padding: 10px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border-primary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .memory-tree-header .mem-import-btn {
+            background: var(--btn-primary-bg);
+            border: none;
+            color: #fff;
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .memory-tree-header .mem-import-btn:hover {
+            background: var(--btn-primary-hover);
+        }
+        .mem-build-btn {
+            background: none;
+            border: 1px solid var(--border-primary);
+            color: var(--text-secondary);
+            font-size: 10px;
+            padding: 1px 5px;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-left: auto;
+            opacity: 0;
+            transition: opacity 0.15s;
+            flex-shrink: 0;
+        }
+        .ws-tree-item:hover .mem-build-btn {
+            opacity: 1;
+        }
+        .mem-build-btn:hover {
+            border-color: var(--accent-blue);
+            color: var(--accent-blue);
+        }
+        .mem-build-btn.building {
+            opacity: 1;
+            pointer-events: none;
+            color: var(--text-muted);
+            border-color: var(--border-primary);
+        }
+        .mem-delete-btn {
+            background: none;
+            border: 1px solid var(--border-primary);
+            color: var(--text-secondary);
+            font-size: 10px;
+            padding: 1px 5px;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-left: 4px;
+            opacity: 0;
+            transition: opacity 0.15s;
+            flex-shrink: 0;
+        }
+        .ws-tree-item:hover .mem-delete-btn {
+            opacity: 1;
+        }
+        .mem-delete-btn:hover {
+            border-color: #ff453a;
+            color: #ff453a;
+        }
+        .memory-tree {
+            flex: 1;
+            overflow-y: auto;
+            padding: 6px 0;
+        }
+        .memory-editor {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .memory-editor-header {
+            padding: 8px 16px;
+            border-bottom: 1px solid var(--border-primary);
+            font-size: 12px;
+            color: var(--text-secondary);
+            background: var(--bg-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .memory-editor-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0;
+        }
+        .memory-import-form {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .memory-import-form label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+        .memory-import-form input,
+        .memory-import-form textarea {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--border-primary);
+            border-radius: 6px;
+            background: var(--bg-input);
+            color: var(--text-primary);
+            font-size: 13px;
+            font-family: inherit;
+            outline: none;
+        }
+        .memory-import-form textarea {
+            min-height: 200px;
+            resize: vertical;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 12px;
+        }
+        .memory-import-form input:focus,
+        .memory-import-form textarea:focus {
+            border-color: var(--accent-blue-border);
+        }
+        .memory-import-form .form-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
         .workspace-sidebar {
             width: 240px;
             min-width: 200px;
@@ -531,6 +690,98 @@
             margin-right: 6px;
             font-size: 14px;
             flex-shrink: 0;
+            width: 16px;
+            height: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .ws-tree-item .ws-icon-dir::before {
+            content: '';
+            width: 14px;
+            height: 11px;
+            border: 1.5px solid var(--text-secondary);
+            border-radius: 2px;
+            border-top-left-radius: 0;
+            position: relative;
+            display: block;
+            box-shadow: -3px -2px 0 -0.5px var(--bg-secondary), -3px -2px 0 0.5px var(--text-secondary);
+        }
+        .ws-tree-item .ws-icon-file::before {
+            content: '';
+            width: 10px;
+            height: 13px;
+            border: 1.5px solid var(--text-secondary);
+            border-radius: 1px;
+            display: block;
+            border-top-right-radius: 4px;
+        }
+        .ws-tree-item.active .ws-icon-dir::before,
+        .ws-tree-item.active .ws-icon-file::before {
+            border-color: var(--accent-blue);
+        }
+        /* Memory import progress */
+        .memory-import-progress {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+            gap: 24px;
+        }
+        .progress-spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid var(--border-primary);
+            border-top-color: var(--accent-blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .progress-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            font-size: 13px;
+        }
+        .progress-step {
+            color: var(--text-muted);
+            padding-left: 22px;
+            position: relative;
+            transition: color 0.3s;
+        }
+        .progress-step::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 4px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            border: 2px solid var(--border-primary);
+            transition: all 0.3s;
+        }
+        .progress-step.active {
+            color: var(--text-primary);
+        }
+        .progress-step.active::before {
+            border-color: var(--accent-blue);
+            background: var(--accent-blue);
+            animation: pulse 1s ease-in-out infinite;
+        }
+        .progress-step.done {
+            color: var(--text-secondary);
+        }
+        .progress-step.done::before {
+            border-color: #34c759;
+            background: #34c759;
+            animation: none;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
         }
         .ws-tree-item .ws-name {
             overflow: hidden;
@@ -660,6 +911,50 @@
         .infer-area textarea:focus { border-color: var(--accent-blue-border); }
         .infer-area textarea::placeholder { color: var(--text-muted); }
         .infer-area textarea:disabled { opacity: 0.5; }
+
+        /* Skill selector */
+        .skill-selector {
+            padding: 6px 24px;
+            border-top: 1px solid var(--border-primary);
+            background: var(--bg-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            transition: background 0.3s, border-color 0.3s;
+        }
+        .skill-selector-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .skill-checkboxes {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .skill-checkboxes label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        .skill-checkboxes label:hover {
+            background: var(--bg-tertiary);
+        }
+        .skill-checkboxes input[type="checkbox"] {
+            width: 13px;
+            height: 13px;
+            accent-color: var(--accent-blue);
+            cursor: pointer;
+        }
 
         /* Recent conversation display */
         .recent-conv {
@@ -822,6 +1117,8 @@
             <div class="view-tab active" id="tabBranch" onclick="switchView('branch')">Branch View</div>
             <div class="view-tab" id="tabGraph" onclick="switchView('graph')">Commit Graph</div>
             <div class="view-tab" id="tabWorkspace" onclick="switchView('workspace')">Workspace</div>
+            <div class="view-tab" id="tabMemory" onclick="switchView('memory')">Memory</div>
+            <div class="view-tab" id="tabSkill" onclick="switchView('skill')">Skill</div>
         </div>
 
         <!-- Commit list (branch view) -->
@@ -840,7 +1137,7 @@
         <!-- Workspace file explorer -->
         <div class="workspace-panel" id="workspacePanel">
             <div class="workspace-sidebar">
-                <div class="workspace-tree-header">📁 Files</div>
+                <div class="workspace-tree-header">Files</div>
                 <div class="workspace-tree" id="workspaceTree"></div>
             </div>
             <div class="workspace-editor">
@@ -848,7 +1145,45 @@
                     <span class="workspace-filepath">Select a file to view</span>
                 </div>
                 <div class="workspace-editor-content" id="workspaceEditorContent">
-                    <div class="empty-state"><div class="icon">📄</div><p>Select a file from the tree to view its contents.</p></div>
+                    <div class="empty-state"><p>Select a file from the tree to view its contents.</p></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Skill panel -->
+        <div class="skill-panel" id="skillPanel">
+            <div class="memory-sidebar">
+                <div class="memory-tree-header">
+                    <span>Skills</span>
+                    <button class="mem-import-btn" onclick="showSkillImportForm()">+ Import</button>
+                </div>
+                <div class="memory-tree" id="skillTree"></div>
+            </div>
+            <div class="memory-editor">
+                <div class="memory-editor-header" id="skillEditorHeader">
+                    <span class="workspace-filepath">Select a skill file to view</span>
+                </div>
+                <div class="memory-editor-content" id="skillEditorContent">
+                    <div class="empty-state"><p>Select a skill from the tree, or click <strong>+ Import</strong> to add a new skill.</p></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Memory panel -->
+        <div class="memory-panel" id="memoryPanel">
+            <div class="memory-sidebar">
+                <div class="memory-tree-header">
+                    <span>Memory</span>
+                    <button class="mem-import-btn" onclick="showMemoryImportForm()">+ Import</button>
+                </div>
+                <div class="memory-tree" id="memoryTree"></div>
+            </div>
+            <div class="memory-editor">
+                <div class="memory-editor-header" id="memoryEditorHeader">
+                    <span class="workspace-filepath">Select a memory file to view</span>
+                </div>
+                <div class="memory-editor-content" id="memoryEditorContent">
+                    <div class="empty-state"><p>Select a memory file from the tree, or click <strong>+ Import</strong> to add new memory.</p></div>
                 </div>
             </div>
         </div>
@@ -860,6 +1195,12 @@
         </div>
 
         <!-- Inference input -->
+        <div class="skill-selector" id="skillSelector">
+            <span class="skill-selector-label">Skills:</span>
+            <div class="skill-checkboxes" id="skillCheckboxes">
+                <span style="color:var(--text-muted);font-size:11px;">Loading...</span>
+            </div>
+        </div>
         <div class="infer-area">
             <textarea id="questionInput" rows="1" placeholder="Enter prompt to start a new inference commit... (⌘/Ctrl+Enter to send)"
                       onkeydown="handleInputKeydown(event)"
@@ -930,10 +1271,14 @@
                 await renderGraph();
             } else if (currentView === 'workspace') {
                 await loadWorkspaceTree();
+            } else if (currentView === 'memory') {
+                await loadMemoryTree();
+            } else if (currentView === 'skill') {
+                await loadSkillTree();
             }
         }
 
-        let currentView = 'branch'; // 'branch', 'graph', or 'workspace'
+        let currentView = 'branch'; // 'branch', 'graph', 'workspace', 'memory', or 'skill'
         const BRANCH_COLORS = ['#58a6ff','#3fb950','#f0883e','#bc8cff','#f778ba','#79c0ff','#7ee787','#d2a8ff','#ff7b72','#ffa657'];
 
         function switchView(view) {
@@ -941,11 +1286,17 @@
             document.getElementById('tabBranch').classList.toggle('active', view === 'branch');
             document.getElementById('tabGraph').classList.toggle('active', view === 'graph');
             document.getElementById('tabWorkspace').classList.toggle('active', view === 'workspace');
+            document.getElementById('tabMemory').classList.toggle('active', view === 'memory');
+            document.getElementById('tabSkill').classList.toggle('active', view === 'skill');
             document.getElementById('commitListPanel').classList.toggle('active', view === 'branch');
             document.getElementById('graphPanel').classList.toggle('active', view === 'graph');
             document.getElementById('workspacePanel').classList.toggle('active', view === 'workspace');
+            document.getElementById('memoryPanel').classList.toggle('active', view === 'memory');
+            document.getElementById('skillPanel').classList.toggle('active', view === 'skill');
             if (view === 'graph') renderGraph();
             if (view === 'workspace') loadWorkspaceTree();
+            if (view === 'memory') loadMemoryTree();
+            if (view === 'skill') loadSkillTree();
         }
 
         async function renderBranches() {
@@ -1277,10 +1628,11 @@
         }
 
         async function streamInfer(branch, question) {
+            const skills = getSelectedSkills();
             const resp = await fetch("/api/infer_stream", {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({branch, question})
+                body: JSON.stringify({branch, question, skills})
             });
 
             if (!resp.ok) {
@@ -1566,16 +1918,15 @@
                     const id = 'ws-dir-' + node.path.replace(/[^a-zA-Z0-9]/g, '_');
                     html += `<div class="ws-tree-item" style="padding-left:${12 + indent}px;" onclick="toggleDir('${id}', this)">
                         <span class="ws-tree-toggle" id="toggle-${id}">▶</span>
-                        <span class="ws-icon">📁</span>
+                        <span class="ws-icon ws-icon-dir"></span>
                         <span class="ws-name">${escapeHtml(node.name)}</span>
                     </div>`;
                     html += `<div class="ws-tree-children" id="${id}">`;
                     html += renderTreeNodes(node.children, depth + 1);
                     html += `</div>`;
                 } else {
-                    const icon = getFileIcon(node.name);
                     html += `<div class="ws-tree-item" style="padding-left:${12 + indent + 18}px;" onclick="openWorkspaceFile('${escapeHtml(node.path)}', this)" data-path="${escapeHtml(node.path)}">
-                        <span class="ws-icon">${icon}</span>
+                        <span class="ws-icon ws-icon-file"></span>
                         <span class="ws-name">${escapeHtml(node.name)}</span>
                     </div>`;
                 }
@@ -1595,18 +1946,7 @@
             }
         }
 
-        function getFileIcon(name) {
-            const ext = name.split('.').pop().toLowerCase();
-            const icons = {
-                'py': '🐍', 'js': '📜', 'ts': '📘', 'html': '🌐', 'css': '🎨',
-                'json': '📋', 'md': '📝', 'txt': '📄', 'yml': '⚙️', 'yaml': '⚙️',
-                'sh': '💻', 'bash': '💻', 'sql': '🗃️', 'go': '🔵', 'rs': '🦀',
-                'java': '☕', 'c': '⚡', 'cpp': '⚡', 'h': '⚡', 'rb': '💎',
-                'php': '🐘', 'swift': '🍎', 'kt': '🟣', 'toml': '⚙️', 'ini': '⚙️',
-                'xml': '📰', 'svg': '🖼️', 'png': '🖼️', 'jpg': '🖼️', 'gif': '🖼️'
-            };
-            return icons[ext] || '📄';
-        }
+        // getFileIcon removed - using CSS-based icons instead
 
         async function openWorkspaceFile(path, el) {
             // Highlight active item
@@ -1718,6 +2058,441 @@
             return escaped;
         }
 
+        // ============ Memory Panel ============
+
+        async function loadMemoryTree() {
+            const resp = await fetch('/api/memory/tree');
+            const tree = await resp.json();
+            const container = document.getElementById('memoryTree');
+            if (tree.length === 0) {
+                container.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:12px;">No memories yet.<br>Click <strong>+ Import</strong> to add memory.</div>';
+                return;
+            }
+            container.innerHTML = renderMemoryTreeNodes(tree, 0);
+        }
+
+        function renderMemoryTreeNodes(nodes, depth) {
+            let html = '';
+            for (const node of nodes) {
+                const indent = depth * 16;
+                if (node.type === 'dir') {
+                    const id = 'mem-dir-' + node.path.replace(/[^a-zA-Z0-9]/g, '_');
+                    html += `<div class="ws-tree-item" style="padding-left:${12 + indent}px;" onclick="toggleMemDir('${id}', this)">
+                        <span class="ws-tree-toggle" id="toggle-${id}">▶</span>
+                        <span class="ws-icon ws-icon-dir"></span>
+                        <span class="ws-name">${escapeHtml(node.name)}</span>
+                        <button class="mem-build-btn" onclick="event.stopPropagation(); triggerBuildForDir('${escapeHtml(node.path)}', this)">Build</button>
+                        <button class="mem-delete-btn" onclick="event.stopPropagation(); deleteMemoryItem('${escapeHtml(node.path)}', 'dir')">Del</button>
+                    </div>`;
+                    html += `<div class="ws-tree-children" id="${id}">`;
+                    html += renderMemoryTreeNodes(node.children, depth + 1);
+                    html += `</div>`;
+                } else {
+                    html += `<div class="ws-tree-item" style="padding-left:${12 + indent + 18}px;" onclick="openMemoryFile('${escapeHtml(node.path)}', this)" data-path="${escapeHtml(node.path)}">
+                        <span class="ws-icon ws-icon-file"></span>
+                        <span class="ws-name">${escapeHtml(node.name)}</span>
+                        <button class="mem-delete-btn" onclick="event.stopPropagation(); deleteMemoryItem('${escapeHtml(node.path)}', 'file')">Del</button>
+                    </div>`;
+                }
+            }
+            return html;
+        }
+
+        async function deleteMemoryItem(itemPath, itemType) {
+            const typeLabel = itemType === 'dir' ? 'folder' : 'file';
+            if (!confirm(`Delete this ${typeLabel}?\n\n${itemPath}\n\nThis action cannot be undone.`)) return;
+
+            try {
+                const resp = await fetch('/api/memory/delete', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({path: itemPath})
+                });
+                const result = await resp.json();
+                if (result.error) {
+                    alert('Delete failed: ' + result.error);
+                } else {
+                    await loadMemoryTree();
+                    // Reset editor if the deleted item was being viewed
+                    const header = document.getElementById('memoryEditorHeader');
+                    const content = document.getElementById('memoryEditorContent');
+                    header.innerHTML = '<span class="workspace-filepath">Select a memory file to view</span>';
+                    content.innerHTML = '<div class="empty-state"><p>Select a memory file from the tree, or click <strong>+ Import</strong> to add new memory.</p></div>';
+                }
+            } catch(e) {
+                alert('Delete failed: ' + e.message);
+            }
+        }
+
+        async function triggerBuildForDir(dirPath, btn) {
+            btn.classList.add('building');
+            const origText = btn.textContent;
+            btn.textContent = 'Building...';
+            try {
+                const resp = await fetch('/api/memory/rebuild_brief', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({path: dirPath})
+                });
+                const result = await resp.json();
+                if (result.error) {
+                    btn.textContent = 'Failed';
+                    setTimeout(() => { btn.textContent = origText; btn.classList.remove('building'); }, 2000);
+                } else {
+                    btn.textContent = 'Done ✓';
+                    setTimeout(() => { btn.textContent = origText; btn.classList.remove('building'); }, 1500);
+                    await loadMemoryTree();
+                }
+            } catch(e) {
+                btn.textContent = 'Error';
+                setTimeout(() => { btn.textContent = origText; btn.classList.remove('building'); }, 2000);
+            }
+        }
+
+        function toggleMemDir(id, el) {
+            const children = document.getElementById(id);
+            const toggle = document.getElementById('toggle-' + id);
+            if (children.classList.contains('expanded')) {
+                children.classList.remove('expanded');
+                toggle.classList.remove('open');
+            } else {
+                children.classList.add('expanded');
+                toggle.classList.add('open');
+            }
+        }
+
+        async function openMemoryFile(path, el) {
+            // Highlight active item
+            document.querySelectorAll('#memoryTree .ws-tree-item.active').forEach(e => e.classList.remove('active'));
+            if (el) el.classList.add('active');
+
+            const resp = await fetch(`/api/memory/file?path=${encodeURIComponent(path)}`);
+            const data = await resp.json();
+
+            const header = document.getElementById('memoryEditorHeader');
+            const content = document.getElementById('memoryEditorContent');
+
+            if (data.error) {
+                header.innerHTML = `<span class="workspace-filepath">${escapeHtml(path)}</span>`;
+                content.innerHTML = `<div class="empty-state"><p>${escapeHtml(data.error)}</p></div>`;
+                return;
+            }
+
+            header.innerHTML = `<span class="workspace-filepath">${escapeHtml(data.path)}</span><span style="color:var(--text-muted);font-size:11px;">${data.extension || 'txt'}</span>`;
+
+            const lines = data.content.split('\n');
+            const lang = data.extension || '';
+            let codeHtml = '<div class="code-view">';
+            for (let i = 0; i < lines.length; i++) {
+                const highlighted = highlightLine(lines[i], lang);
+                codeHtml += `<div class="code-line"><span class="line-number">${i + 1}</span><span class="line-content">${highlighted}</span></div>`;
+            }
+            codeHtml += '</div>';
+            content.innerHTML = codeHtml;
+        }
+
+        function showMemoryImportForm() {
+            const content = document.getElementById('memoryEditorContent');
+            const header = document.getElementById('memoryEditorHeader');
+            header.innerHTML = '<span class="workspace-filepath">Import New Memory</span>';
+            content.innerHTML = `
+                <div class="memory-import-form">
+                    <div>
+                        <label>Path (relative to memory root, e.g. "project/design.md")</label>
+                        <input type="text" id="memImportPath" placeholder="e.g. project/architecture.md">
+                    </div>
+                    <div>
+                        <label>Content</label>
+                        <textarea id="memImportContent" placeholder="Enter memory content here..."></textarea>
+                    </div>
+                    <div class="form-actions" style="display:flex;align-items:center;justify-content:space-between;">
+                        <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--text-secondary);cursor:pointer;white-space:nowrap;">
+<input type="checkbox" id="memSkipBrief"> Skip brief.md generation
+                        </label>
+                        <div style="display:flex;gap:8px;">
+                            <button class="btn" onclick="cancelMemoryImport()">Cancel</button>
+                            <button class="btn btn-primary" onclick="doMemoryImport()">Import</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function cancelMemoryImport() {
+            const content = document.getElementById('memoryEditorContent');
+            const header = document.getElementById('memoryEditorHeader');
+            header.innerHTML = '<span class="workspace-filepath">Select a memory file to view</span>';
+            content.innerHTML = '<div class="empty-state"><p>Select a memory file from the tree, or click <strong>+ Import</strong> to add new memory.</p></div>';
+        }
+
+        async function doMemoryImport() {
+            const pathInput = document.getElementById('memImportPath');
+            const contentInput = document.getElementById('memImportContent');
+            const skipBriefCheckbox = document.getElementById('memSkipBrief');
+            const path = pathInput.value.trim();
+            const memContent = contentInput.value;
+            const skipBrief = skipBriefCheckbox && skipBriefCheckbox.checked;
+
+            if (!path) { alert('Please enter a path'); return; }
+            if (!memContent) { alert('Please enter content'); return; }
+
+            // Show progress overlay
+            const content = document.getElementById('memoryEditorContent');
+
+            if (skipBrief) {
+                // Simple import without brief generation
+                const progressHtml = `
+                    <div class="memory-import-progress">
+                        <div class="progress-spinner"></div>
+                        <div class="progress-steps">
+                            <div class="progress-step active" id="step-write">Writing file to <code>${escapeHtml(path)}</code></div>
+                            <div class="progress-step" id="step-done">Import complete</div>
+                        </div>
+                    </div>
+                `;
+                content.innerHTML = progressHtml;
+
+                try {
+                    const writeResp = await fetch('/api/memory/import', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({path: path, content: memContent, skip_brief: true})
+                    });
+                    const writeResult = await writeResp.json();
+                    if (writeResult.error) {
+                        content.innerHTML = `<div class="empty-state"><p style="color:#ff453a;">Import failed: ${escapeHtml(writeResult.error)}</p></div>`;
+                        return;
+                    }
+                    document.getElementById('step-write').classList.add('done');
+                    document.getElementById('step-write').classList.remove('active');
+                    document.getElementById('step-done').classList.add('active', 'done');
+                    const spinner = content.querySelector('.progress-spinner');
+                    if (spinner) spinner.style.display = 'none';
+                    await new Promise(r => setTimeout(r, 500));
+                    await loadMemoryTree();
+                    await openMemoryFile(path, null);
+                } catch(e) {
+                    content.innerHTML = `<div class="empty-state"><p style="color:#ff453a;">Import failed: ${escapeHtml(e.message)}</p></div>`;
+                }
+            } else {
+                // Full import with brief generation
+                const progressHtml = `
+                    <div class="memory-import-progress">
+                        <div class="progress-spinner"></div>
+                        <div class="progress-steps">
+                            <div class="progress-step active" id="step-write">Writing file to <code>${escapeHtml(path)}</code></div>
+                            <div class="progress-step" id="step-brief">Generating directory briefs (LLM summarization)</div>
+                            <div class="progress-step" id="step-done">Import complete</div>
+                        </div>
+                    </div>
+                `;
+                content.innerHTML = progressHtml;
+
+                try {
+                    // Step 1: Write file
+                    const writeResp = await fetch('/api/memory/import', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({path: path, content: memContent, skip_brief: true})
+                    });
+                    const writeResult = await writeResp.json();
+                    if (writeResult.error) {
+                        content.innerHTML = `<div class="empty-state"><p style="color:#ff453a;">Import failed: ${escapeHtml(writeResult.error)}</p></div>`;
+                        return;
+                    }
+
+                    // Step 2: Generate briefs
+                    document.getElementById('step-write').classList.add('done');
+                    document.getElementById('step-write').classList.remove('active');
+                    document.getElementById('step-brief').classList.add('active');
+
+                    const briefResp = await fetch('/api/memory/rebuild_brief', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({path: path.split('/').slice(0, -1).join('/')})
+                    });
+                    const briefResult = await briefResp.json();
+
+                    // Step 3: Done
+                    document.getElementById('step-brief').classList.add('done');
+                    document.getElementById('step-brief').classList.remove('active');
+                    document.getElementById('step-done').classList.add('active', 'done');
+
+                    const spinner = content.querySelector('.progress-spinner');
+                    if (spinner) spinner.style.display = 'none';
+
+                    await new Promise(r => setTimeout(r, 600));
+                    await loadMemoryTree();
+                    await openMemoryFile(path, null);
+                } catch(e) {
+                    content.innerHTML = `<div class="empty-state"><p style="color:#ff453a;">Import failed: ${escapeHtml(e.message)}</p></div>`;
+                }
+            }
+        }
+
+        // ============ Skill Panel ============
+
+        async function loadSkillTree() {
+            const resp = await fetch('/api/skill/tree');
+            const tree = await resp.json();
+            const container = document.getElementById('skillTree');
+            if (tree.length === 0) {
+                container.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:12px;">No skills yet.<br>Click <strong>+ Import</strong> to add a skill.</div>';
+                return;
+            }
+            container.innerHTML = renderSkillTreeNodes(tree, 0);
+        }
+
+        function renderSkillTreeNodes(nodes, depth) {
+            let html = '';
+            for (const node of nodes) {
+                const indent = depth * 16;
+                if (node.type === 'dir') {
+                    const id = 'skill-dir-' + node.path.replace(/[^a-zA-Z0-9]/g, '_');
+                    html += `<div class="ws-tree-item" style="padding-left:${12 + indent}px;" onclick="toggleSkillDir('${id}', this)">
+                        <span class="ws-tree-toggle" id="toggle-${id}">▶</span>
+                        <span class="ws-icon ws-icon-dir"></span>
+                        <span class="ws-name">${escapeHtml(node.name)}</span>
+                        <button class="mem-delete-btn" onclick="event.stopPropagation();deleteSkill('${escapeHtml(node.path)}','dir')" title="Delete">✕</button>
+                    </div>`;
+                    html += `<div class="ws-tree-children" id="${id}">`;
+                    html += renderSkillTreeNodes(node.children, depth + 1);
+                    html += `</div>`;
+                } else {
+                    html += `<div class="ws-tree-item" style="padding-left:${12 + indent + 18}px;" onclick="openSkillFile('${escapeHtml(node.path)}', this)" data-path="${escapeHtml(node.path)}">
+                        <span class="ws-icon ws-icon-file"></span>
+                        <span class="ws-name">${escapeHtml(node.name)}</span>
+                        <button class="mem-delete-btn" onclick="event.stopPropagation();deleteSkill('${escapeHtml(node.path)}','file')" title="Delete">✕</button>
+                    </div>`;
+                }
+            }
+            return html;
+        }
+
+        function toggleSkillDir(id, el) {
+            const children = document.getElementById(id);
+            const toggle = document.getElementById('toggle-' + id);
+            if (children.classList.contains('expanded')) {
+                children.classList.remove('expanded');
+                toggle.classList.remove('open');
+            } else {
+                children.classList.add('expanded');
+                toggle.classList.add('open');
+            }
+        }
+
+        async function openSkillFile(path, el) {
+            // Highlight active item
+            document.querySelectorAll('#skillTree .ws-tree-item.active').forEach(e => e.classList.remove('active'));
+            if (el) el.classList.add('active');
+
+            const resp = await fetch(`/api/skill/file?path=${encodeURIComponent(path)}`);
+            const data = await resp.json();
+
+            const header = document.getElementById('skillEditorHeader');
+            const content = document.getElementById('skillEditorContent');
+
+            if (data.error) {
+                header.innerHTML = `<span class="workspace-filepath">${escapeHtml(path)}</span>`;
+                content.innerHTML = `<div class="empty-state"><p>${escapeHtml(data.error)}</p></div>`;
+                return;
+            }
+
+            header.innerHTML = `<span class="workspace-filepath">${escapeHtml(data.path)}</span><span style="color:var(--text-muted);font-size:11px;">${data.extension || 'txt'}</span>`;
+
+            const lines = data.content.split('\n');
+            const lang = data.extension || '';
+            let codeHtml = '<div class="code-view">';
+            for (let i = 0; i < lines.length; i++) {
+                const highlighted = highlightLine(lines[i], lang);
+                codeHtml += `<div class="code-line"><span class="line-number">${i + 1}</span><span class="line-content">${highlighted}</span></div>`;
+            }
+            codeHtml += '</div>';
+            content.innerHTML = codeHtml;
+        }
+
+        function showSkillImportForm() {
+            const content = document.getElementById('skillEditorContent');
+            const header = document.getElementById('skillEditorHeader');
+            header.innerHTML = '<span class="workspace-filepath">Import New Skill</span>';
+            content.innerHTML = `
+                <div class="memory-import-form">
+                    <div>
+                        <label>Path (relative to skill root, e.g. "coding/python-best-practices.md")</label>
+                        <input type="text" id="skillImportPath" placeholder="e.g. coding/refactoring.md">
+                    </div>
+                    <div>
+                        <label>Content</label>
+                        <textarea id="skillImportContent" placeholder="Enter skill content here (Markdown)..."></textarea>
+                    </div>
+                    <div class="form-actions" style="display:flex;align-items:center;justify-content:flex-end;gap:8px;">
+                        <button class="btn" onclick="cancelSkillImport()">Cancel</button>
+                        <button class="btn btn-primary" onclick="doSkillImport()">Import</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function cancelSkillImport() {
+            const content = document.getElementById('skillEditorContent');
+            const header = document.getElementById('skillEditorHeader');
+            header.innerHTML = '<span class="workspace-filepath">Select a skill file to view</span>';
+            content.innerHTML = '<div class="empty-state"><p>Select a skill from the tree, or click <strong>+ Import</strong> to add a new skill.</p></div>';
+        }
+
+        async function doSkillImport() {
+            const pathInput = document.getElementById('skillImportPath');
+            const contentInput = document.getElementById('skillImportContent');
+            const path = pathInput.value.trim();
+            const skillContent = contentInput.value;
+
+            if (!path) { alert('Please enter a path'); return; }
+            if (!skillContent) { alert('Please enter content'); return; }
+
+            try {
+                const resp = await fetch('/api/skill/import', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({path: path, content: skillContent})
+                });
+                const result = await resp.json();
+                if (result.error) {
+                    alert('Import failed: ' + result.error);
+                    return;
+                }
+                // Refresh tree and show the imported file
+                await loadSkillTree();
+                await openSkillFile(result.path, null);
+                await loadSkillSelector();
+            } catch(e) {
+                alert('Import failed: ' + e.message);
+            }
+        }
+
+        async function deleteSkill(path, type) {
+            const label = type === 'dir' ? 'directory' : 'file';
+            if (!confirm(`Delete this ${label}?\n${path}`)) return;
+            try {
+                const resp = await fetch('/api/skill/delete', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({path: path})
+                });
+                const result = await resp.json();
+                if (result.error) {
+                    alert('Delete failed: ' + result.error);
+                    return;
+                }
+                await loadSkillTree();
+                await loadSkillSelector();
+                // Reset editor
+                document.getElementById('skillEditorHeader').innerHTML = '<span class="workspace-filepath">Select a skill file to view</span>';
+                document.getElementById('skillEditorContent').innerHTML = '<div class="empty-state"><p>Select a skill from the tree, or click <strong>+ Import</strong> to add a new skill.</p></div>';
+            } catch(e) {
+                alert('Delete failed: ' + e.message);
+            }
+        }
+
         // ============ Theme Toggle ============
 
         function toggleTheme() {
@@ -1811,9 +2586,37 @@
             }
         }
 
+        // ============ Skill Selector (for inference) ============
+        const DEFAULT_SKILLS = ['memory.md'];
+
+        async function loadSkillSelector() {
+            try {
+                const resp = await fetch('/api/skill/list');
+                const skills = await resp.json();
+                const container = document.getElementById('skillCheckboxes');
+                if (!skills || skills.length === 0) {
+                    container.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">No skills available</span>';
+                    return;
+                }
+                container.innerHTML = skills.map(path => {
+                    const checked = DEFAULT_SKILLS.includes(path) ? 'checked' : '';
+                    const name = path.replace(/\.md$/, '').replace(/\//g, ' / ');
+                    return `<label><input type="checkbox" value="${escapeHtml(path)}" ${checked}> ${escapeHtml(name)}</label>`;
+                }).join('');
+            } catch (e) {
+                document.getElementById('skillCheckboxes').innerHTML = '<span style="color:var(--text-muted);font-size:11px;">Failed to load skills</span>';
+            }
+        }
+
+        function getSelectedSkills() {
+            const checkboxes = document.querySelectorAll('#skillCheckboxes input[type="checkbox"]:checked');
+            return Array.from(checkboxes).map(cb => cb.value);
+        }
+
         // ============ Init ============
         refreshAll();
         loadRecentConv();
+        loadSkillSelector();
     </script>
 </body>
 </html>
