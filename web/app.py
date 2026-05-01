@@ -1162,6 +1162,181 @@ def memory_rebuild_brief():
     return jsonify({"ok": True})
 
 
+@app.route("/api/commit/<commit_id>/compress", methods=["POST"])
+def compress_commit(commit_id):
+    """Analyze a commit's messages and suggest deletions/simplifications using LLM."""
+    commit = db_get_commit(commit_id)
+    if not commit:
+        return jsonify({"error": "Commit not found"}), 404
+
+    messages = commit["messages"]
+    if not messages:
+        return jsonify({"error": "Commit has no messages"}), 400
+
+    # Build a prompt for the LLM to analyze each message
+    msg_descriptions = []
+    for i, msg in enumerate(messages):
+        role = msg.get("role", "unknown")
+        content = msg.get("content", "") or ""
+        tool_calls = msg.get("tool_calls")
+
+        desc = f"[Message {i}] role={role}"
+        if tool_calls:
+            names = [tc.get("function", {}).get("name", "?") for tc in tool_calls]
+            desc += f", tool_calls=[{', '.join(names)}]"
+            if content:
+                desc += f"\ncontent: {content[:500]}"
+            for tc in tool_calls:
+                args = tc.get("function", {}).get("arguments", "")
+                desc += f"\ntool_call args ({tc.get('function', {}).get('name', '?')}): {args[:300]}"
+        elif role == "tool":
+            tool_name = msg.get("name", "unknown")
+            desc += f", tool_name={tool_name}\ncontent: {content[:500]}"
+        else:
+            desc += f"\ncontent: {content[:500]}"
+            if len(content) > 500:
+                desc += "... (truncated)"
+
+        msg_descriptions.append(desc)
+
+    analysis_prompt = (
+        "You are a conversation compressor. Analyze the following messages from a conversation commit "
+        "and for each message, decide:\n"
+        "1. Should it be KEPT as-is, DELETED (not worth keeping), or MODIFIED (can be simplified)?\n"
+        "2. If MODIFIED, provide the simplified version of the content.\n\n"
+        "Guidelines:\n"
+        "- User messages should generally be KEPT (they provide context).\n"
+        "- Tool call results (role=tool) that are very long or contain raw data dumps can often be DELETED or MODIFIED to a brief summary.\n"
+        "- Assistant messages with tool_calls can be KEPT if they show reasoning, or MODIFIED to just note which tools were called.\n"
+        "- Final assistant responses should generally be KEPT.\n"
+        "- Intermediate thinking/reasoning that's redundant with the final answer can be DELETED or MODIFIED.\n\n"
+        "Respond in JSON format as an array of objects, one per message:\n"
+        '[\n  {"index": 0, "action": "keep"},\n'
+        '  {"index": 1, "action": "delete", "reason": "..."},\n'
+        '  {"index": 2, "action": "modify", "reason": "...", "new_content": "..."}\n]\n\n'
+        "Messages to analyze:\n\n" + "\n\n".join(msg_descriptions)
+    )
+
+    try:
+        resp = requests.post(API_URL, json={
+            "messages": [{"role": "user", "content": analysis_prompt}],
+            "temperature": 0,
+            "stream": False
+        }, headers={"Content-Type": "application/json"}, timeout=120)
+        resp.raise_for_status()
+        result = resp.json()
+        llm_response = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+    except Exception as e:
+        return jsonify({"error": f"LLM request failed: {str(e)}"}), 500
+
+    # Parse the JSON response from LLM
+    try:
+        # Try to extract JSON from the response (LLM might wrap it in markdown)
+        json_str = llm_response
+        if "```json" in json_str:
+            json_str = json_str.split("```json")[1].split("```")[0]
+        elif "```" in json_str:
+            json_str = json_str.split("```")[1].split("```")[0]
+        suggestions = json.loads(json_str.strip())
+    except (json.JSONDecodeError, IndexError):
+        return jsonify({"error": "Failed to parse LLM suggestions", "raw": llm_response}), 500
+
+    # Enrich suggestions with original message info for frontend display
+    enriched = []
+    for s in suggestions:
+        idx = s.get("index", -1)
+        if idx < 0 or idx >= len(messages):
+            continue
+        msg = messages[idx]
+        entry = {
+            "index": idx,
+            "action": s.get("action", "keep"),
+            "reason": s.get("reason", ""),
+            "new_content": s.get("new_content", ""),
+            "original_role": msg.get("role", "unknown"),
+            "original_content_preview": (msg.get("content") or "")[:200],
+            "has_tool_calls": bool(msg.get("tool_calls")),
+        }
+        if msg.get("role") == "tool":
+            entry["tool_name"] = msg.get("name", "")
+        if msg.get("tool_calls"):
+            entry["tool_call_names"] = [tc.get("function", {}).get("name", "") for tc in msg["tool_calls"]]
+        enriched.append(entry)
+
+    return jsonify({"commit_id": commit_id, "suggestions": enriched})
+
+
+@app.route("/api/commit/<commit_id>/apply_compress", methods=["POST"])
+def apply_compress(commit_id):
+    """Apply compression actions to a commit's messages.
+    Expects: {"actions": [{"index": 0, "action": "keep|delete|modify", "new_content": "..."}]}
+    """
+    commit = db_get_commit(commit_id)
+    if not commit:
+        return jsonify({"error": "Commit not found"}), 404
+
+    data = request.json
+    actions = data.get("actions", [])
+    if not actions:
+        return jsonify({"error": "No actions provided"}), 400
+
+    messages = commit["messages"]
+
+    # Build a set of indices to delete and a map of modifications
+    delete_indices = set()
+    modify_map = {}  # index -> new_content
+
+    for a in actions:
+        idx = a.get("index", -1)
+        if idx < 0 or idx >= len(messages):
+            continue
+        action = a.get("action")
+        if action == "delete":
+            delete_indices.add(idx)
+        elif action == "modify":
+            modify_map[idx] = a.get("new_content", "")
+
+    # Apply modifications
+    new_messages = []
+    for i, msg in enumerate(messages):
+        if i in delete_indices:
+            # If deleting an assistant message with tool_calls, also delete corresponding tool results
+            if msg.get("tool_calls"):
+                tool_call_ids = {tc.get("id") for tc in msg["tool_calls"]}
+                # Mark subsequent tool messages for deletion too
+                for j in range(i + 1, len(messages)):
+                    if messages[j].get("role") == "tool" and messages[j].get("tool_call_id") in tool_call_ids:
+                        delete_indices.add(j)
+            continue
+        if i in modify_map:
+            modified_msg = dict(msg)
+            modified_msg["content"] = modify_map[i]
+            # If modifying a tool_calls message, remove tool_calls to simplify
+            if "tool_calls" in modified_msg and modify_map[i]:
+                del modified_msg["tool_calls"]
+            new_messages.append(modified_msg)
+        else:
+            new_messages.append(msg)
+
+    # Update the commit in the database
+    conn = get_db()
+    conn.execute(
+        "UPDATE commits SET messages = ? WHERE id = ?",
+        (json.dumps(new_messages, ensure_ascii=False), commit_id)
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        "ok": True,
+        "commit_id": commit_id,
+        "original_count": len(messages),
+        "new_count": len(new_messages),
+        "deleted": len(delete_indices),
+        "modified": len(modify_map)
+    })
+
+
 # ============ Skill Routes ============
 
 SKILL_DIR = SKILL_ABS_PATH
