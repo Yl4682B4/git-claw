@@ -23,6 +23,7 @@ SYSTEM_PROMPT = (
     "You are a helpful assistant. Use the provided tools to answer questions.\n"
     f"You have a workspace directory at: {WORKSPACE_ABS_PATH}\n"
     "When you need to create, read, or modify files, operate within this workspace directory by default unless the user specifies otherwise.\n"
+    "Prefer using the `read_file` and `write_file` tools for file operations instead of shell commands like cat/echo.\n"
     "You may have skills injected below that provide additional capabilities and knowledge."
 )
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gitclaw.db")
@@ -203,8 +204,38 @@ def load_selected_skills(skill_paths):
     return "\n\n".join(skill_texts)
 
 
-def build_messages_from_history(branch_name, max_commits=10, selected_skills=None):
-    """Build the LLM message list from branch history."""
+def estimate_tokens(text):
+    """Estimate token count for a string. Uses ~4 chars per token as a rough heuristic."""
+    if not text:
+        return 0
+    return len(text) // 4 + 1
+
+
+def estimate_message_tokens(msg):
+    """Estimate token count for a single message (including role overhead)."""
+    tokens = 4  # role/formatting overhead
+    content = msg.get("content") or ""
+    tokens += estimate_tokens(content)
+    if "tool_calls" in msg and msg["tool_calls"]:
+        for tc in msg["tool_calls"]:
+            func = tc.get("function", {})
+            tokens += estimate_tokens(func.get("name", ""))
+            tokens += estimate_tokens(func.get("arguments", ""))
+            tokens += 4  # tool_call overhead
+    return tokens
+
+
+# Maximum context window tokens (reserve space for new response)
+MAX_CONTEXT_TOKENS = 28000  # Total budget for history messages
+RESPONSE_RESERVE_TOKENS = 4000  # Reserved for the model's response
+
+
+def build_messages_from_history(branch_name, max_commits=50, selected_skills=None):
+    """Build the LLM message list from branch history with token-aware truncation.
+
+    Strategy: Always include the system prompt and the most recent commits.
+    If total tokens exceed MAX_CONTEXT_TOKENS, drop the oldest commits first.
+    """
     history = get_branch_history(branch_name, max_commits)
     # Build system prompt with selected skills injected
     system_content = SYSTEM_PROMPT
@@ -212,10 +243,43 @@ def build_messages_from_history(branch_name, max_commits=10, selected_skills=Non
         skills_content = load_selected_skills(selected_skills)
         if skills_content:
             system_content += "\n\n# Skills\n\n" + skills_content
-    messages = [{"role": "system", "content": system_content}]
+    system_msg = {"role": "system", "content": system_content}
+    system_tokens = estimate_message_tokens(system_msg)
+
+    # Calculate token budget for history (total - system - response reserve)
+    history_budget = MAX_CONTEXT_TOKENS - system_tokens - RESPONSE_RESERVE_TOKENS
+
+    # Build per-commit token costs (each commit has multiple messages)
+    commit_token_costs = []
     for commit in history:
+        cost = sum(estimate_message_tokens(sanitize_message(msg)) for msg in commit["messages"])
+        commit_token_costs.append(cost)
+
+    # Find the earliest commit we can include while staying within budget
+    # Start from the most recent and work backwards
+    total_tokens = 0
+    start_index = len(history)
+    for i in range(len(history) - 1, -1, -1):
+        if total_tokens + commit_token_costs[i] > history_budget:
+            break
+        total_tokens += commit_token_costs[i]
+        start_index = i
+
+    # Build final message list
+    messages = [system_msg]
+
+    # If we truncated, add a note so the model knows context was trimmed
+    if start_index > 0:
+        truncation_note = {
+            "role": "system",
+            "content": f"[Note: {start_index} earlier conversation commit(s) were truncated due to context length limits. The conversation below starts from a later point.]"
+        }
+        messages.append(truncation_note)
+
+    for commit in history[start_index:]:
         for msg in commit["messages"]:
             messages.append(sanitize_message(msg))
+
     return messages
 
 

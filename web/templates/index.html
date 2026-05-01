@@ -1123,9 +1123,12 @@
 
         <!-- Commit list (branch view) -->
         <div class="commit-list-panel active" id="commitListPanel">
-            <div class="empty-state" id="emptyState">
-                <div class="icon">📭</div>
-                <p>No commits on this branch yet.<br>Enter a prompt below to start your first inference.</p>
+
+            <div id="commitListContent">
+                <div class="empty-state" id="emptyState">
+                    <div class="icon">📭</div>
+                    <p>No commits on this branch yet.<br>Enter a prompt below to start your first inference.</p>
+                </div>
             </div>
         </div>
 
@@ -1239,6 +1242,7 @@
         let activeBranch = "main";
         let checkoutCommitId = null;
         let isInferring = false;
+
 
         // ============ API ============
 
@@ -1473,16 +1477,16 @@
 
         async function renderCommitList() {
             const history = await fetchHistory(activeBranch);
-            const panel = document.getElementById("commitListPanel");
+            const content = document.getElementById("commitListContent");
 
             if (history.length === 0) {
-                panel.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>No commits on this branch yet.<br>Enter a prompt below to start your first inference.</p></div>`;
+                content.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>No commits on this branch yet.<br>Enter a prompt below to start your first inference.</p></div>`;
                 return;
             }
 
-            // Render commits in reverse order (newest first)
             const commits = history.slice().reverse();
-            panel.innerHTML = commits.map((c, i) => renderCommitCard(c, i === 0)).join("");
+            const latestId = history[history.length - 1].id;
+            content.innerHTML = commits.map(c => renderCommitCard(c, c.id === latestId)).join("");
         }
 
         function renderCommitCard(commit, isLatest) {
@@ -1584,11 +1588,12 @@
             input.disabled = true;
             document.getElementById("inferBtn").disabled = true;
 
-            // Create a live commit card at the top
-            const panel = document.getElementById("commitListPanel");
+            // Create a live commit card
+            const panel = document.getElementById("commitListContent");
             // Remove empty state if present
             const emptyState = panel.querySelector(".empty-state");
             if (emptyState) emptyState.remove();
+
 
             const liveCardId = "live-infer";
             const liveHtml = `
@@ -1773,6 +1778,7 @@
             if (liveDetail) {
                 liveDetail.scrollTop = liveDetail.scrollHeight;
             }
+
         }
 
         // ============ Actions ============
